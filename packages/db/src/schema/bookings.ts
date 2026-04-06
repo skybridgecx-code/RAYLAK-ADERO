@@ -67,6 +67,9 @@ export const bookings = pgTable(
     // Privacy flag for VIP clients
     isPrivate: boolean("is_private").notNull().default(false),
 
+    // Acquisition tracking — how the customer found RAYLAK
+    acquisitionSource: text("acquisition_source"),
+
     // Cancellation
     canceledAt: timestamp("canceled_at", { withTimezone: true }),
     canceledById: uuid("canceled_by_id").references(() => users.id, { onDelete: "set null" }),

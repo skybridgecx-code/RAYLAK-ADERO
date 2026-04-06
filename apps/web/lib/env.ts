@@ -13,11 +13,14 @@ export const env = createEnv({
     CLERK_SECRET_KEY: z.string().min(1),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
+    // Phase 2 — email + Clerk webhook
+    RESEND_API_KEY: z.string().min(1).optional(),
+    CLERK_WEBHOOK_SECRET: z.string().min(1).optional(),
+
     // Reserved — uncomment when integrating
     // TWILIO_ACCOUNT_SID: z.string().min(1),
     // TWILIO_AUTH_TOKEN: z.string().min(1),
     // TWILIO_PHONE_NUMBER: z.string().min(1),
-    // RESEND_API_KEY: z.string().min(1),
     // STRIPE_SECRET_KEY: z.string().min(1),
     // STRIPE_WEBHOOK_SECRET: z.string().min(1),
     // AWS_ACCESS_KEY_ID: z.string().min(1),
@@ -38,6 +41,8 @@ export const env = createEnv({
     REDIS_URL: process.env["REDIS_URL"],
     CLERK_SECRET_KEY: process.env["CLERK_SECRET_KEY"],
     NODE_ENV: process.env["NODE_ENV"],
+    RESEND_API_KEY: process.env["RESEND_API_KEY"],
+    CLERK_WEBHOOK_SECRET: process.env["CLERK_WEBHOOK_SECRET"],
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"],
     NEXT_PUBLIC_APP_URL: process.env["NEXT_PUBLIC_APP_URL"],
   },

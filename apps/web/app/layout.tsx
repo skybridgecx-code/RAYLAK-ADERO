@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     template: "%s | RAYLAK",
   },
   description: "Premium transportation, reimagined.",
-  robots: { index: false, follow: false }, // Set to true when public-ready
+  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {

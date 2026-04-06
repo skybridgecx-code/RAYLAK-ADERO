@@ -7,7 +7,8 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    clerkId: text("clerk_id").notNull().unique(),
+    // Nullable to support guest-booked customer records; linked on Clerk sign-up
+    clerkId: text("clerk_id").unique(),
     email: text("email").notNull().unique(),
     firstName: text("first_name"),
     lastName: text("last_name"),

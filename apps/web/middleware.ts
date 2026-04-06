@@ -12,6 +12,8 @@ const isPublicRoute = createRouteMatcher([
   "/about",
   "/services(.*)",
   "/contact",
+  "/airports(.*)",
+  "/book(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/trpc/(.*)", // tRPC public procedures handle their own auth

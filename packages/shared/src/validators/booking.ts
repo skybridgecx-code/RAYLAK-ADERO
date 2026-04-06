@@ -1,6 +1,38 @@
 import { z } from "zod";
 import { BOOKING_STATUSES, SERVICE_TYPES } from "../enums";
 
+/**
+ * Public booking intake schema — used by the customer-facing booking form.
+ * Does not require an existing customerId; the server upserts the customer.
+ */
+export const BookingIntakeSchema = z.object({
+  // Customer contact info
+  firstName: z.string().min(1, "First name is required").max(100),
+  lastName: z.string().min(1, "Last name is required").max(100),
+  email: z.string().email("A valid email is required"),
+  phone: z
+    .string()
+    .min(10, "Phone number must be at least 10 digits")
+    .max(20)
+    .regex(/^[\d\s\-\+\(\)\.]+$/, "Invalid phone format"),
+
+  // Trip details
+  serviceType: z.enum(SERVICE_TYPES, { message: "Please select a service type" }),
+  scheduledAt: z.coerce
+    .date()
+    .refine((d) => d > new Date(), { message: "Scheduled date must be in the future" }),
+  pickupAddress: z.string().min(1, "Pickup address is required"),
+  dropoffAddress: z.string().min(1, "Drop-off address is required"),
+  passengerCount: z.coerce.number().int().min(1).max(20).default(1),
+  flightNumber: z.string().max(20).optional(),
+  specialInstructions: z.string().max(1000).optional(),
+
+  // Acquisition source (auto-set by the referring page)
+  acquisitionSource: z.string().max(100).optional(),
+});
+
+export type BookingIntakeInput = z.infer<typeof BookingIntakeSchema>;
+
 export const CreateBookingSchema = z.object({
   serviceType: z.enum(SERVICE_TYPES),
   customerId: z.string().min(1),

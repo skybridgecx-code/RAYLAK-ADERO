@@ -75,13 +75,30 @@ export type UpdateBookingStatusInput = z.infer<typeof UpdateBookingStatusSchema>
 
 export const BookingFilterSchema = z.object({
   status: z.enum(BOOKING_STATUSES).optional(),
+  serviceType: z.enum(SERVICE_TYPES).optional(),
   driverId: z.string().optional(),
   vehicleId: z.string().optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
-  search: z.string().optional(),
-  page: z.number().int().positive().default(1),
-  limit: z.number().int().min(1).max(100).default(20),
+  search: z.string().max(200).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export type BookingFilterInput = z.infer<typeof BookingFilterSchema>;
+
+// ─── Operator quote & confirm workflows ──────────────────────────────────────
+
+export const QuoteBookingSchema = z.object({
+  bookingId: z.string().uuid(),
+  quotedAmount: z.coerce.number().positive("Quoted amount must be positive"),
+  note: z.string().max(2000).optional(),
+});
+
+export type QuoteBookingInput = z.infer<typeof QuoteBookingSchema>;
+
+export const ConfirmBookingSchema = z.object({
+  bookingId: z.string().uuid(),
+});
+
+export type ConfirmBookingInput = z.infer<typeof ConfirmBookingSchema>;

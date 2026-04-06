@@ -24,6 +24,8 @@ export const vehicles = pgTable(
     vin: text("vin").unique(),
     color: text("color"),
     capacity: integer("capacity").notNull().default(4),
+    luggageCapacity: integer("luggage_capacity"),
+    amenities: text("amenities"), // free-text, operator-maintained (e.g. "WiFi, Water, USB")
     isActive: boolean("is_active").notNull().default(true),
     notes: text("notes"),
     imageUrl: text("image_url"),

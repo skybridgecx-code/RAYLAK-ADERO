@@ -26,6 +26,10 @@ export const driverProfiles = pgTable(
     // Soft rating — not displayed publicly
     internalRating: integer("internal_rating"), // stored as 0-500 (0.0–5.0 × 100)
 
+    // Driver's self-reported availability status
+    // Values: available | on_ride | break | offline
+    availabilityStatus: text("availability_status").notNull().default("offline"),
+
     bio: text("bio"),
     notes: text("notes"), // dispatcher-visible only
 

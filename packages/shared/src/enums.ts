@@ -79,6 +79,17 @@ export const SERVICE_TYPES = [
 
 export type ServiceType = (typeof SERVICE_TYPES)[number];
 
+// ─── Driver Availability ─────────────────────────────────────────────────────
+
+export const DRIVER_AVAILABILITY_STATUSES = [
+  "available", // Ready to accept and perform rides
+  "on_ride",   // Currently executing an assigned ride
+  "break",     // Temporarily unavailable
+  "offline",   // Not accepting any rides
+] as const;
+
+export type DriverAvailabilityStatus = (typeof DRIVER_AVAILABILITY_STATUSES)[number];
+
 // ─── Notification Channels ────────────────────────────────────────────────────
 
 export const NOTIFICATION_CHANNELS = ["email", "sms", "push", "in_app"] as const;

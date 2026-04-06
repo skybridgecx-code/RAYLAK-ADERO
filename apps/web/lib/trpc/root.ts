@@ -5,6 +5,7 @@ import { dashboardRouter } from "./routers/dashboard";
 import { vehicleRouter } from "./routers/vehicle";
 import { driverRouter } from "./routers/driver";
 import { customerRouter } from "./routers/customer";
+import { rideRouter } from "./routers/ride";
 
 export const appRouter = createTRPCRouter({
   booking: bookingRouter,
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   vehicle: vehicleRouter,
   driver: driverRouter,
   customer: customerRouter,
+  ride: rideRouter,
 });
 
 export type AppRouter = typeof appRouter;

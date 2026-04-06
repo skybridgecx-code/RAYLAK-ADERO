@@ -2,6 +2,9 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { auth } from "@clerk/nextjs/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
+import { eq } from "drizzle-orm";
+import { db } from "@raylak/db";
+import { users, driverProfiles } from "@raylak/db";
 import type { UserRole } from "@raylak/shared/enums";
 
 /**
@@ -69,4 +72,40 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
   return next({ ctx });
+});
+
+/**
+ * Requires driver role.
+ * Resolves the calling driver's driverProfile.id from their Clerk userId
+ * and injects driverProfileId + driverUserId into context.
+ * All driver procedures are automatically row-scoped to this driver.
+ */
+export const driverProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  if (ctx.role !== "driver") {
+    throw new TRPCError({ code: "FORBIDDEN" });
+  }
+
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.clerkId, ctx.userId),
+    columns: { id: true },
+  });
+  if (!dbUser) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Driver user record not found." });
+  }
+
+  const profile = await db.query.driverProfiles.findFirst({
+    where: eq(driverProfiles.userId, dbUser.id),
+    columns: { id: true },
+  });
+  if (!profile) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Driver profile not found." });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      driverProfileId: profile.id,
+      driverUserId: dbUser.id,
+    },
+  });
 });

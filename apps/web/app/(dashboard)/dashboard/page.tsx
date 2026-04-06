@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createServerCaller } from "~/lib/trpc/server";
+import { LiveEventFeed } from "@/components/dashboard/live-event-feed";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -65,6 +66,9 @@ export default async function DashboardOverviewPage() {
           accent="bg-[#c9a96e]"
         />
       </div>
+
+      {/* Live event feed — renders only when NEXT_PUBLIC_REALTIME_URL is set */}
+      <LiveEventFeed />
 
       {/* Quick links */}
       <div className="bg-white rounded-lg border border-gray-100 p-6">

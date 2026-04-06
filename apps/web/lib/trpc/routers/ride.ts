@@ -7,6 +7,11 @@ import { bookings, bookingStatusLog, users, driverProfiles, vehicles } from "@ra
 import { AdvanceRideStatusSchema, SetDriverAvailabilitySchema, DRIVER_ALLOWED_TO_STATUSES } from "@raylak/shared/validators";
 import { BOOKING_STATUS_TRANSITIONS } from "@raylak/shared/enums";
 import { createTRPCRouter, driverProcedure } from "../trpc";
+import {
+  emitBookingStatusChanged,
+  emitDriverAvailabilityChanged,
+  emitDriverLocationUpdated,
+} from "../../events";
 
 // Active statuses visible in the driver's queue
 const QUEUE_STATUSES = [
@@ -176,6 +181,21 @@ export const rideRouter = createTRPCRouter({
         snapshot: { source: "driver_app" },
       });
 
+      // Fetch referenceCode for the event
+      const [ref] = await db
+        .select({ referenceCode: bookings.referenceCode })
+        .from(bookings)
+        .where(eq(bookings.id, input.bookingId))
+        .limit(1);
+
+      emitBookingStatusChanged({
+        bookingId: input.bookingId,
+        referenceCode: ref?.referenceCode ?? "",
+        fromStatus: booking.status,
+        toStatus: input.toStatus,
+        actorId: ctx.driverUserId,
+      });
+
       return { success: true };
     }),
 
@@ -235,6 +255,48 @@ export const rideRouter = createTRPCRouter({
           updatedAt: new Date(),
         })
         .where(eq(driverProfiles.id, ctx.driverProfileId));
+
+      emitDriverAvailabilityChanged({
+        driverProfileId: ctx.driverProfileId,
+        status: input.status,
+      });
+
+      return { success: true };
+    }),
+
+  // ─── Driver location update ──────────────────────────────────────────────────
+
+  updateLocation: driverProcedure
+    .input(
+      z.object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+        heading: z.number().int().min(0).max(359).optional(),
+        speed: z.number().min(0).optional(), // km/h
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const now = new Date();
+
+      await db
+        .update(driverProfiles)
+        .set({
+          lastLat: String(input.lat),
+          lastLng: String(input.lng),
+          lastHeading: input.heading ?? null,
+          lastSpeed: input.speed !== undefined ? String(input.speed) : null,
+          lastLocationAt: now,
+          updatedAt: now,
+        })
+        .where(eq(driverProfiles.id, ctx.driverProfileId));
+
+      emitDriverLocationUpdated({
+        driverProfileId: ctx.driverProfileId,
+        lat: input.lat,
+        lng: input.lng,
+        heading: input.heading ?? null,
+        speed: input.speed ?? null,
+      });
 
       return { success: true };
     }),

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uuid, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, uuid, integer, numeric, index } from "drizzle-orm/pg-core";
 import { users } from "./users";
 import { vehicles } from "./vehicles";
 
@@ -32,6 +32,13 @@ export const driverProfiles = pgTable(
 
     bio: text("bio"),
     notes: text("notes"), // dispatcher-visible only
+
+    // Last known GPS position — written by ride.updateLocation mutation
+    lastLat: numeric("last_lat", { precision: 10, scale: 7 }),
+    lastLng: numeric("last_lng", { precision: 10, scale: 7 }),
+    lastHeading: integer("last_heading"),       // 0–359 degrees
+    lastSpeed: numeric("last_speed", { precision: 6, scale: 2 }), // km/h
+    lastLocationAt: timestamp("last_location_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -31,6 +31,9 @@ export const env = createEnv({
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
     NEXT_PUBLIC_APP_URL: z.string().url(),
 
+    // Phase 6 — realtime server URL; optional so build passes without it
+    NEXT_PUBLIC_REALTIME_URL: z.string().url().optional(),
+
     // Reserved
     // NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: z.string().min(1),
     // NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1),
@@ -45,6 +48,7 @@ export const env = createEnv({
     CLERK_WEBHOOK_SECRET: process.env["CLERK_WEBHOOK_SECRET"],
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"],
     NEXT_PUBLIC_APP_URL: process.env["NEXT_PUBLIC_APP_URL"],
+    NEXT_PUBLIC_REALTIME_URL: process.env["NEXT_PUBLIC_REALTIME_URL"],
   },
   skipValidation: process.env["SKIP_ENV_VALIDATION"] === "1",
   emptyStringAsUndefined: true,

@@ -15,6 +15,10 @@ import {
 import { BOOKING_STATUS_TRANSITIONS } from "@raylak/shared/enums";
 import { createTRPCRouter, publicProcedure, dispatcherProcedure } from "../trpc";
 import { sendBookingConfirmation } from "../../email";
+import {
+  emitBookingStatusChanged,
+  emitBookingAssigned,
+} from "../../events";
 
 function generateReferenceCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -423,7 +427,7 @@ export const bookingRouter = createTRPCRouter({
 
   addQuote: dispatcherProcedure.input(QuoteBookingSchema).mutation(async ({ input, ctx }) => {
     const [booking] = await db
-      .select({ id: bookings.id, status: bookings.status, customerId: bookings.customerId })
+      .select({ id: bookings.id, status: bookings.status, customerId: bookings.customerId, referenceCode: bookings.referenceCode })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
       .limit(1);
@@ -458,6 +462,14 @@ export const bookingRouter = createTRPCRouter({
       snapshot: { quotedAmount: input.quotedAmount },
     });
 
+    emitBookingStatusChanged({
+      bookingId: input.bookingId,
+      referenceCode: booking.referenceCode,
+      fromStatus: "new_request",
+      toStatus: "quoted",
+      actorId,
+    });
+
     return { success: true };
   }),
 
@@ -465,7 +477,7 @@ export const bookingRouter = createTRPCRouter({
 
   confirm: dispatcherProcedure.input(ConfirmBookingSchema).mutation(async ({ input, ctx }) => {
     const [booking] = await db
-      .select({ id: bookings.id, status: bookings.status })
+      .select({ id: bookings.id, status: bookings.status, referenceCode: bookings.referenceCode })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
       .limit(1);
@@ -500,6 +512,14 @@ export const bookingRouter = createTRPCRouter({
       snapshot: {},
     });
 
+    emitBookingStatusChanged({
+      bookingId: input.bookingId,
+      referenceCode: booking.referenceCode,
+      fromStatus: "quoted",
+      toStatus: "confirmed",
+      actorId,
+    });
+
     return { success: true };
   }),
 
@@ -507,7 +527,7 @@ export const bookingRouter = createTRPCRouter({
 
   assign: dispatcherProcedure.input(AssignBookingSchema).mutation(async ({ input, ctx }) => {
     const [booking] = await db
-      .select({ id: bookings.id, status: bookings.status, serviceType: bookings.serviceType, scheduledAt: bookings.scheduledAt })
+      .select({ id: bookings.id, status: bookings.status, serviceType: bookings.serviceType, scheduledAt: bookings.scheduledAt, referenceCode: bookings.referenceCode })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
       .limit(1);
@@ -617,6 +637,21 @@ export const bookingRouter = createTRPCRouter({
       },
     });
 
+    emitBookingAssigned({
+      bookingId: input.bookingId,
+      referenceCode: booking.referenceCode,
+      driverProfileId: input.driverProfileId,
+      vehicleId: input.vehicleId,
+      actorId,
+    });
+    emitBookingStatusChanged({
+      bookingId: input.bookingId,
+      referenceCode: booking.referenceCode,
+      fromStatus: "confirmed",
+      toStatus: "assigned",
+      actorId,
+    });
+
     return { success: true };
   }),
 
@@ -624,7 +659,7 @@ export const bookingRouter = createTRPCRouter({
 
   cancel: dispatcherProcedure.input(CancelBookingSchema).mutation(async ({ input, ctx }) => {
     const [booking] = await db
-      .select({ id: bookings.id, status: bookings.status })
+      .select({ id: bookings.id, status: bookings.status, referenceCode: bookings.referenceCode })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
       .limit(1);
@@ -660,6 +695,14 @@ export const bookingRouter = createTRPCRouter({
       actorId,
       note: input.reason,
       snapshot: { canceledBy: "operator" },
+    });
+
+    emitBookingStatusChanged({
+      bookingId: input.bookingId,
+      referenceCode: booking.referenceCode,
+      fromStatus: booking.status,
+      toStatus: "canceled",
+      actorId,
     });
 
     return { success: true };

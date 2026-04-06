@@ -2,10 +2,24 @@
   "name": "@raylak/realtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Reserved — Socket.io real-time server. Not implemented in Phase 1.",
+  "description": "Socket.io realtime server with Redis pub/sub backbone",
+  "main": "dist/index.js",
   "scripts": {
-    "dev": "echo 'Realtime server not yet implemented'",
-    "build": "echo 'Realtime server not yet implemented'",
-    "typecheck": "echo 'Realtime server not yet implemented'"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clerk/backend": "^1.24.3",
+    "@raylak/shared": "workspace:*",
+    "ioredis": "^5.4.1",
+    "socket.io": "^4.8.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
   }
 }

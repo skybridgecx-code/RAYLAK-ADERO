@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@raylak/shared", "@raylak/ui"],
+  transpilePackages: ["@raylak/shared", "@raylak/ui", "@raylak/db"],
 
   experimental: {
     reactCompiler: false,

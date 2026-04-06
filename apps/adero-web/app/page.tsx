@@ -44,7 +44,7 @@ function Nav() {
           ))}
         </nav>
         <a
-          href="#apply"
+          href="/apply"
           className="rounded px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80"
           style={{ background: "#6366f1" }}
         >
@@ -99,14 +99,14 @@ function Hero() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a
-            href="#apply"
+            href="/apply/company"
             className="rounded-lg px-8 py-3.5 text-sm font-semibold text-white transition-opacity hover:opacity-85"
             style={{ background: "#6366f1" }}
           >
             Apply for Company Access
           </a>
           <a
-            href="#operators"
+            href="/apply/operator"
             className="rounded-lg border px-8 py-3.5 text-sm font-medium transition-colors hover:bg-white/5"
             style={{
               borderColor: "rgba(255,255,255,0.15)",
@@ -471,14 +471,14 @@ function ApplyCTA() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a
-            href="mailto:network@adero.io"
+            href="/apply/company"
             className="rounded-lg px-8 py-3.5 text-sm font-semibold text-white transition-opacity hover:opacity-85"
             style={{ background: "#6366f1" }}
           >
             Apply as a Company
           </a>
           <a
-            href="mailto:operators@adero.io"
+            href="/apply/operator"
             className="rounded-lg border px-8 py-3.5 text-sm font-medium transition-colors hover:bg-white/5"
             style={{
               borderColor: "rgba(255,255,255,0.15)",

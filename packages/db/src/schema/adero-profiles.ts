@@ -24,7 +24,7 @@ export const aderoCompanyProfiles = pgTable(
     website: text("website"),
     fleetSize: integer("fleet_size"),
     serviceNotes: text("service_notes"),
-    activationStatus: text("activation_status").notNull().default("activated"),
+    activationStatus: text("activation_status").notNull().default("active"),
 
     activatedAt: timestamp("activated_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -61,7 +61,7 @@ export const aderoOperatorProfiles = pgTable(
     vehicleYear: integer("vehicle_year"),
     yearsExperience: integer("years_experience"),
     serviceNotes: text("service_notes"),
-    activationStatus: text("activation_status").notNull().default("activated"),
+    activationStatus: text("activation_status").notNull().default("active"),
 
     activatedAt: timestamp("activated_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

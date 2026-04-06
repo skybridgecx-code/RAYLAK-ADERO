@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { aderoCompanyApplications, aderoCompanyProfiles, db } from "@raylak/db";
 import { eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
+import { PROFILE_STATUS_LABELS, type ProfileStatus } from "~/lib/validators";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
 
 export const metadata: Metadata = {
@@ -30,6 +31,8 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
   if (!row) notFound();
 
   const { profile, application } = row;
+  const profileStatusLabel =
+    PROFILE_STATUS_LABELS[profile.activationStatus as ProfileStatus] ?? profile.activationStatus;
 
   return (
     <ProfileShell backHref="/admin/profiles/companies" backLabel="<- Company profiles">
@@ -53,6 +56,14 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
         </div>
 
         <Link
+          href={`/admin/profiles/companies/${profile.id}/edit`}
+          className="rounded-lg px-4 py-2 text-sm font-medium"
+          style={{ background: "#6366f1", color: "#fff" }}
+        >
+          Edit profile
+        </Link>
+
+        <Link
           href={`/admin/company/${profile.applicationId}`}
           className="rounded-lg px-4 py-2 text-sm font-medium"
           style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8" }}
@@ -71,6 +82,7 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
               Company
             </h2>
             <dl>
+              <DetailRow label="Profile status" value={profileStatusLabel} />
               <DetailRow label="Company name" value={profile.companyName} />
               <DetailRow label="Website" value={profile.website} />
               <DetailRow label="Fleet size" value={profile.fleetSize} />

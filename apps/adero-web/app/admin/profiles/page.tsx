@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { aderoCompanyProfiles, aderoOperatorProfiles, db } from "@raylak/db";
-import { count, eq } from "drizzle-orm";
+import { count } from "drizzle-orm";
 
 export const metadata: Metadata = {
   title: "Activated Members - Adero Admin",
@@ -12,14 +12,8 @@ export const dynamic = "force-dynamic";
 
 export default async function ProfilesPage() {
   const [[companyCount], [operatorCount]] = await Promise.all([
-    db
-      .select({ n: count() })
-      .from(aderoCompanyProfiles)
-      .where(eq(aderoCompanyProfiles.activationStatus, "activated")),
-    db
-      .select({ n: count() })
-      .from(aderoOperatorProfiles)
-      .where(eq(aderoOperatorProfiles.activationStatus, "activated")),
+    db.select({ n: count() }).from(aderoCompanyProfiles),
+    db.select({ n: count() }).from(aderoOperatorProfiles),
   ]);
 
   return (

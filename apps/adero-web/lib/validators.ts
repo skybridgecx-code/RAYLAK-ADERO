@@ -48,7 +48,13 @@ export const OperatorApplicationSchema = z.object({
   city: z.string().min(2, "City is required"),
   state: z.string().optional(),
   vehicleType: z.enum(VEHICLE_TYPES, { message: "Please select a vehicle type" }),
-  vehicleYear: z.coerce.number().int().min(1990).max(new Date().getFullYear() + 1).optional().or(z.literal("")),
+  vehicleYear: z.coerce
+    .number()
+    .int()
+    .min(1990)
+    .max(new Date().getFullYear() + 1)
+    .optional()
+    .or(z.literal("")),
   yearsExperience: z.coerce.number().int().min(0).max(50).optional().or(z.literal("")),
   currentAffiliations: z.string().optional(),
   bio: z.string().optional(),
@@ -73,6 +79,17 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   approved: "Approved",
   activated: "Activated",
   rejected: "Rejected",
+};
+
+// ─── Activated profile lifecycle ─────────────────────────────────────────────
+
+export const PROFILE_STATUSES = ["active", "paused", "inactive"] as const;
+export type ProfileStatus = (typeof PROFILE_STATUSES)[number];
+
+export const PROFILE_STATUS_LABELS: Record<ProfileStatus, string> = {
+  active: "Active",
+  paused: "Paused",
+  inactive: "Inactive",
 };
 
 // ─── Shared action state ──────────────────────────────────────────────────────

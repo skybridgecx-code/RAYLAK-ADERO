@@ -3,6 +3,7 @@ import Link from "next/link";
 import { aderoCompanyProfiles, db } from "@raylak/db";
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
+import { PROFILE_STATUS_LABELS, PROFILE_STATUSES } from "~/lib/validators";
 import { EmptyState, fmt } from "../profile-parts";
 
 export const metadata: Metadata = {
@@ -19,13 +20,17 @@ export default async function CompanyProfilesPage({
 }) {
   const sp = await searchParams;
   const q = typeof sp["q"] === "string" ? sp["q"].trim() : "";
+  const statusParam = typeof sp["status"] === "string" ? sp["status"] : "all";
+  const status = PROFILE_STATUSES.includes(statusParam as (typeof PROFILE_STATUSES)[number])
+    ? statusParam
+    : "all";
 
   const rows = await db
     .select()
     .from(aderoCompanyProfiles)
     .where(
       and(
-        eq(aderoCompanyProfiles.activationStatus, "activated"),
+        status !== "all" ? eq(aderoCompanyProfiles.activationStatus, status) : undefined,
         q
           ? or(
               ilike(aderoCompanyProfiles.companyName, `%${q}%`),
@@ -53,7 +58,7 @@ export default async function CompanyProfilesPage({
           Company Profiles
         </h1>
         <p className="mt-1 text-sm" style={{ color: "#475569" }}>
-          {rows.length} activated companies
+          {rows.length} company profiles
         </p>
       </div>
 
@@ -76,6 +81,29 @@ export default async function CompanyProfilesPage({
           />
         </div>
 
+        <div>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: "#64748b" }}>
+            Status
+          </label>
+          <select
+            name="status"
+            defaultValue={status}
+            className="rounded-lg border px-3 py-2 text-sm outline-none"
+            style={{
+              borderColor: "rgba(255,255,255,0.12)",
+              background: "#1e293b",
+              color: "#f1f5f9",
+            }}
+          >
+            <option value="all">All statuses</option>
+            {PROFILE_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {PROFILE_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <button
           type="submit"
           className="rounded-lg px-4 py-2 text-sm font-medium"
@@ -84,7 +112,7 @@ export default async function CompanyProfilesPage({
           Filter
         </button>
 
-        {q && (
+        {(q || status !== "all") && (
           <Link
             href="/admin/profiles/companies"
             className="rounded-lg px-4 py-2 text-sm transition-colors hover:bg-white/5"
@@ -96,7 +124,7 @@ export default async function CompanyProfilesPage({
       </form>
 
       {rows.length === 0 ? (
-        <EmptyState label="No activated company profiles match your filters." />
+        <EmptyState label="No company profiles match your filters." />
       ) : (
         <div
           className="overflow-hidden rounded-xl border"

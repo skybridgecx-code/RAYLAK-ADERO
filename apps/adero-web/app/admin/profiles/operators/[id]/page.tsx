@@ -4,7 +4,12 @@ import { notFound } from "next/navigation";
 import { aderoOperatorApplications, aderoOperatorProfiles, db } from "@raylak/db";
 import { eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
-import { VEHICLE_TYPE_LABELS, type VehicleType } from "~/lib/validators";
+import {
+  PROFILE_STATUS_LABELS,
+  VEHICLE_TYPE_LABELS,
+  type ProfileStatus,
+  type VehicleType,
+} from "~/lib/validators";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
 
 export const metadata: Metadata = {
@@ -34,6 +39,8 @@ export default async function OperatorProfilePage({ params }: { params: Promise<
   const location = [profile.city, profile.state].filter(Boolean).join(", ");
   const vehicleLabel =
     VEHICLE_TYPE_LABELS[profile.vehicleType as VehicleType] ?? profile.vehicleType;
+  const profileStatusLabel =
+    PROFILE_STATUS_LABELS[profile.activationStatus as ProfileStatus] ?? profile.activationStatus;
 
   return (
     <ProfileShell backHref="/admin/profiles/operators" backLabel="<- Operator profiles">
@@ -57,6 +64,14 @@ export default async function OperatorProfilePage({ params }: { params: Promise<
         </div>
 
         <Link
+          href={`/admin/profiles/operators/${profile.id}/edit`}
+          className="rounded-lg px-4 py-2 text-sm font-medium"
+          style={{ background: "#14b8a6", color: "#042f2e" }}
+        >
+          Edit profile
+        </Link>
+
+        <Link
           href={`/admin/operator/${profile.applicationId}`}
           className="rounded-lg px-4 py-2 text-sm font-medium"
           style={{ background: "rgba(20,184,166,0.12)", color: "#2dd4bf" }}
@@ -75,6 +90,7 @@ export default async function OperatorProfilePage({ params }: { params: Promise<
               Operator
             </h2>
             <dl>
+              <DetailRow label="Profile status" value={profileStatusLabel} />
               <DetailRow label="Full name" value={profile.fullName} />
               <DetailRow label="City" value={profile.city} />
               <DetailRow label="State" value={profile.state} />

@@ -54,11 +54,6 @@ async function updateCompanyStatus({
         .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
         .where(eq(aderoCompanyApplications.id, id));
 
-      await tx
-        .update(aderoCompanyProfiles)
-        .set({ activationStatus: status, updatedAt: now })
-        .where(eq(aderoCompanyProfiles.applicationId, id));
-
       return;
     }
 
@@ -82,7 +77,7 @@ async function updateCompanyStatus({
       website: app.website,
       fleetSize: app.fleetSize,
       serviceNotes: app.overflowNeeds,
-      activationStatus: status,
+      activationStatus: "active",
       activatedAt,
       updatedAt: now,
     };
@@ -117,11 +112,6 @@ async function updateOperatorStatus({
         .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
         .where(eq(aderoOperatorApplications.id, id));
 
-      await tx
-        .update(aderoOperatorProfiles)
-        .set({ activationStatus: status, updatedAt: now })
-        .where(eq(aderoOperatorProfiles.applicationId, id));
-
       return;
     }
 
@@ -146,7 +136,7 @@ async function updateOperatorStatus({
       vehicleYear: app.vehicleYear,
       yearsExperience: app.yearsExperience,
       serviceNotes: buildOperatorServiceNotes(app),
-      activationStatus: status,
+      activationStatus: "active",
       activatedAt,
       updatedAt: now,
     };

@@ -56,6 +56,18 @@ export const OperatorApplicationSchema = z.object({
 
 export type OperatorApplicationInput = z.infer<typeof OperatorApplicationSchema>;
 
+// ─── Application status workflow ─────────────────────────────────────────────
+
+export const APPLICATION_STATUSES = ["pending", "reviewing", "approved", "rejected"] as const;
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
+
+export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
+  pending: "New",
+  reviewing: "Reviewing",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
 // ─── Shared action state ──────────────────────────────────────────────────────
 
 export interface ApplicationActionState {

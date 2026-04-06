@@ -47,6 +47,9 @@ importers:
       '@raylak/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      drizzle-orm:
+        specifier: ^0.39.1
+        version: 0.39.3(postgres@3.4.9)
       next:
         specifier: ^15.1.4
         version: 15.5.14(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

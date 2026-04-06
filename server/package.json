@@ -1,0 +1,11 @@
+{
+  "name": "@raylak/realtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reserved — Socket.io real-time server. Not implemented in Phase 1.",
+  "scripts": {
+    "dev": "echo 'Realtime server not yet implemented'",
+    "build": "echo 'Realtime server not yet implemented'",
+    "typecheck": "echo 'Realtime server not yet implemented'"
+  }
+}

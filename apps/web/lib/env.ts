@@ -17,10 +17,12 @@ export const env = createEnv({
     RESEND_API_KEY: z.string().min(1).optional(),
     CLERK_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+    // Phase 8 — SMS delivery via Twilio (optional; SMS is skipped if unset)
+    TWILIO_ACCOUNT_SID: z.string().min(1).optional(),
+    TWILIO_AUTH_TOKEN: z.string().min(1).optional(),
+    TWILIO_PHONE_NUMBER: z.string().min(1).optional(),
+
     // Reserved — uncomment when integrating
-    // TWILIO_ACCOUNT_SID: z.string().min(1),
-    // TWILIO_AUTH_TOKEN: z.string().min(1),
-    // TWILIO_PHONE_NUMBER: z.string().min(1),
     // STRIPE_SECRET_KEY: z.string().min(1),
     // STRIPE_WEBHOOK_SECRET: z.string().min(1),
     // AWS_ACCESS_KEY_ID: z.string().min(1),
@@ -35,7 +37,6 @@ export const env = createEnv({
     NEXT_PUBLIC_REALTIME_URL: z.string().url().optional(),
 
     // Reserved
-    // NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: z.string().min(1),
     // NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1),
     // NEXT_PUBLIC_SENTRY_DSN: z.string().url(),
   },
@@ -46,6 +47,9 @@ export const env = createEnv({
     NODE_ENV: process.env["NODE_ENV"],
     RESEND_API_KEY: process.env["RESEND_API_KEY"],
     CLERK_WEBHOOK_SECRET: process.env["CLERK_WEBHOOK_SECRET"],
+    TWILIO_ACCOUNT_SID: process.env["TWILIO_ACCOUNT_SID"],
+    TWILIO_AUTH_TOKEN: process.env["TWILIO_AUTH_TOKEN"],
+    TWILIO_PHONE_NUMBER: process.env["TWILIO_PHONE_NUMBER"],
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"],
     NEXT_PUBLIC_APP_URL: process.env["NEXT_PUBLIC_APP_URL"],
     NEXT_PUBLIC_REALTIME_URL: process.env["NEXT_PUBLIC_REALTIME_URL"],

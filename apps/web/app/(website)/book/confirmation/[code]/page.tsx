@@ -140,16 +140,16 @@ export default async function ConfirmationPage({ params }: PageProps) {
           {/* Actions */}
           <div className="mt-10 flex flex-col sm:flex-row gap-4">
             <Link
+              href={`/track/${booking.referenceCode}`}
+              className="flex-1 text-center rounded bg-[#0c1830] px-6 py-3 text-sm text-white font-medium hover:bg-[#0e2040] transition-colors"
+            >
+              Track My Ride →
+            </Link>
+            <Link
               href="/"
               className="flex-1 text-center rounded border border-gray-200 px-6 py-3 text-sm text-gray-600 hover:border-gray-400 transition-colors"
             >
               Back to Home
-            </Link>
-            <Link
-              href="/contact"
-              className="flex-1 text-center rounded bg-[#0c1830] px-6 py-3 text-sm text-white font-medium hover:bg-[#0e2040] transition-colors"
-            >
-              Contact Us
             </Link>
           </div>
 

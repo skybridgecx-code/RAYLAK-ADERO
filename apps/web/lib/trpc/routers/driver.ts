@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { eq, desc, count, ilike, or, and } from "drizzle-orm";
+import { eq, desc, count, ilike, or, and, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@raylak/db";
 import { driverProfiles, users, vehicles } from "@raylak/db";
@@ -269,4 +269,29 @@ export const driverRouter = createTRPCRouter({
         .where(eq(driverProfiles.id, input.id));
       return { success: true };
     }),
+
+  /**
+   * Returns all active drivers with a known location for the dispatcher map.
+   * Only includes drivers who have reported a location (lastLat/lastLng set).
+   */
+  listForMap: dispatcherProcedure.query(async () => {
+    const rows = await db
+      .select({
+        id: driverProfiles.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        isOnline: driverProfiles.isOnline,
+        availabilityStatus: driverProfiles.availabilityStatus,
+        lastLat: driverProfiles.lastLat,
+        lastLng: driverProfiles.lastLng,
+        lastHeading: driverProfiles.lastHeading,
+        lastSpeed: driverProfiles.lastSpeed,
+        lastLocationAt: driverProfiles.lastLocationAt,
+      })
+      .from(driverProfiles)
+      .leftJoin(users, eq(driverProfiles.userId, users.id))
+      .where(and(isNotNull(driverProfiles.lastLat), eq(users.isActive, true)));
+
+    return rows;
+  }),
 });

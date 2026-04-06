@@ -100,6 +100,13 @@ export function startRedisSubscriber(
       routeToDriver(io.of("/rides").to(`driver:${event.driverUserId}`), event);
     }
 
+    // Push booking status changes to the customer tracking room keyed by reference code
+    if (event.type === "booking.status_changed" && event.referenceCode) {
+      io.of("/track")
+        .to(`track:${event.referenceCode.toUpperCase()}`)
+        .emit("booking.status_changed", event);
+    }
+
     if (env.NODE_ENV === "development") {
       console.log(`[redis:sub] Routed: ${event.type}`);
     }

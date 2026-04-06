@@ -14,7 +14,8 @@ import {
 } from "@raylak/shared/validators";
 import { BOOKING_STATUS_TRANSITIONS } from "@raylak/shared/enums";
 import { createTRPCRouter, publicProcedure, dispatcherProcedure } from "../trpc";
-import { sendBookingConfirmation } from "../../email";
+import { sendBookingConfirmation, sendBookingConfirmedEmail, sendDriverAssignedEmail } from "../../email";
+import { sendDriverAssignedSms } from "../../sms";
 import {
   emitBookingStatusChanged,
   emitBookingAssigned,
@@ -176,6 +177,42 @@ export const bookingRouter = createTRPCRouter({
 
       if (!booking) throw new TRPCError({ code: "NOT_FOUND" });
       return booking;
+    }),
+
+  /**
+   * Public tracking query — safe for unauthenticated customers.
+   * Accessible via reference code. Returns booking status + driver/vehicle
+   * summary for active rides. Driver email/phone never exposed.
+   */
+  getTrackingByCode: publicProcedure
+    .input(z.object({ code: z.string().min(1).max(20) }))
+    .query(async ({ input }) => {
+      const [row] = await db
+        .select({
+          referenceCode: bookings.referenceCode,
+          status: bookings.status,
+          serviceType: bookings.serviceType,
+          scheduledAt: bookings.scheduledAt,
+          pickupAddress: bookings.pickupAddress,
+          dropoffAddress: bookings.dropoffAddress,
+          passengerCount: bookings.passengerCount,
+          // Driver — first name only for customer-facing view
+          driverFirstName: driverUsers.firstName,
+          // Vehicle — no license plate exposed to public
+          vehicleMake: vehicles.make,
+          vehicleModel: vehicles.model,
+          vehicleColor: vehicles.color,
+          vehicleYear: vehicles.year,
+        })
+        .from(bookings)
+        .leftJoin(driverProfiles, eq(bookings.assignedDriverId, driverProfiles.id))
+        .leftJoin(driverUsers, eq(driverProfiles.userId, driverUsers.id))
+        .leftJoin(vehicles, eq(bookings.assignedVehicleId, vehicles.id))
+        .where(eq(bookings.referenceCode, input.code))
+        .limit(1);
+
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+      return row;
     }),
 
   // ─── Operator: booking list ─────────────────────────────────────────────────
@@ -477,7 +514,16 @@ export const bookingRouter = createTRPCRouter({
 
   confirm: dispatcherProcedure.input(ConfirmBookingSchema).mutation(async ({ input, ctx }) => {
     const [booking] = await db
-      .select({ id: bookings.id, status: bookings.status, referenceCode: bookings.referenceCode })
+      .select({
+        id: bookings.id,
+        status: bookings.status,
+        referenceCode: bookings.referenceCode,
+        customerId: bookings.customerId,
+        serviceType: bookings.serviceType,
+        scheduledAt: bookings.scheduledAt,
+        pickupAddress: bookings.pickupAddress,
+        dropoffAddress: bookings.dropoffAddress,
+      })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
       .limit(1);
@@ -520,6 +566,29 @@ export const bookingRouter = createTRPCRouter({
       actorId,
     });
 
+    // Fire-and-forget: notify customer their booking is confirmed
+    void (async () => {
+      try {
+        const customer = await db.query.users.findFirst({
+          where: eq(users.id, booking.customerId),
+          columns: { email: true, firstName: true },
+        });
+        if (customer?.email && customer.firstName) {
+          await sendBookingConfirmedEmail({
+            to: customer.email,
+            firstName: customer.firstName,
+            referenceCode: booking.referenceCode,
+            serviceType: booking.serviceType,
+            scheduledAt: booking.scheduledAt,
+            pickupAddress: booking.pickupAddress,
+            dropoffAddress: booking.dropoffAddress,
+          });
+        }
+      } catch (err) {
+        console.error("[email] booking confirmed notification failed:", err);
+      }
+    })();
+
     return { success: true };
   }),
 
@@ -527,7 +596,15 @@ export const bookingRouter = createTRPCRouter({
 
   assign: dispatcherProcedure.input(AssignBookingSchema).mutation(async ({ input, ctx }) => {
     const [booking] = await db
-      .select({ id: bookings.id, status: bookings.status, serviceType: bookings.serviceType, scheduledAt: bookings.scheduledAt, referenceCode: bookings.referenceCode })
+      .select({
+        id: bookings.id,
+        status: bookings.status,
+        serviceType: bookings.serviceType,
+        scheduledAt: bookings.scheduledAt,
+        referenceCode: bookings.referenceCode,
+        customerId: bookings.customerId,
+        pickupAddress: bookings.pickupAddress,
+      })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
       .limit(1);
@@ -652,6 +729,57 @@ export const bookingRouter = createTRPCRouter({
       toStatus: "assigned",
       actorId,
     });
+
+    // Fire-and-forget: notify customer their driver is assigned
+    void (async () => {
+      try {
+        const [customer, assignedVehicle, driverUser] = await Promise.all([
+          db.query.users.findFirst({
+            where: eq(users.id, booking.customerId),
+            columns: { email: true, firstName: true, phone: true },
+          }),
+          db.query.vehicles.findFirst({
+            where: eq(vehicles.id, input.vehicleId),
+            columns: { make: true, model: true, color: true, year: true, licensePlate: true },
+          }),
+          db.query.users.findFirst({
+            where: eq(users.id, driverProfile.userId),
+            columns: { firstName: true },
+          }),
+        ]);
+        if (!customer || !assignedVehicle || !driverUser?.firstName) return;
+        const vMake = assignedVehicle.make;
+        const vModel = assignedVehicle.model;
+        const dName = driverUser.firstName;
+        if (customer.email && customer.firstName) {
+          await sendDriverAssignedEmail({
+            to: customer.email,
+            firstName: customer.firstName,
+            referenceCode: booking.referenceCode,
+            scheduledAt: booking.scheduledAt,
+            pickupAddress: booking.pickupAddress,
+            driverFirstName: dName,
+            vehicleMake: vMake,
+            vehicleModel: vModel,
+            vehicleColor: assignedVehicle.color,
+            vehicleYear: assignedVehicle.year,
+            vehicleLicensePlate: assignedVehicle.licensePlate,
+          });
+        }
+        if (customer.phone && customer.firstName) {
+          await sendDriverAssignedSms(
+            customer.phone,
+            customer.firstName,
+            booking.referenceCode,
+            dName,
+            vMake,
+            vModel,
+          );
+        }
+      } catch (err) {
+        console.error("[notify] driver assigned notification failed:", err);
+      }
+    })();
 
     return { success: true };
   }),

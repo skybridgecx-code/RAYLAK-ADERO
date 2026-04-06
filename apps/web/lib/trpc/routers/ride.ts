@@ -12,6 +12,8 @@ import {
   emitDriverAvailabilityChanged,
   emitDriverLocationUpdated,
 } from "../../events";
+import { sendDriverEnRouteSms, sendDriverArrivedSms, sendRideCompletedSms } from "../../sms";
+import { sendRideCompletedEmail } from "../../email";
 
 // Active statuses visible in the driver's queue
 const QUEUE_STATUSES = [
@@ -195,6 +197,41 @@ export const rideRouter = createTRPCRouter({
         toStatus: input.toStatus,
         actorId: ctx.driverUserId,
       });
+
+      // Fire-and-forget customer notification for key status transitions
+      if (
+        input.toStatus === "driver_en_route" ||
+        input.toStatus === "driver_arrived" ||
+        input.toStatus === "completed"
+      ) {
+        const toStatus = input.toStatus;
+        const refCode = ref?.referenceCode ?? "";
+        void (async () => {
+          try {
+            const [bk] = await db
+              .select({ customerId: bookings.customerId })
+              .from(bookings)
+              .where(eq(bookings.id, input.bookingId))
+              .limit(1);
+            if (!bk) return;
+            const customer = await db.query.users.findFirst({
+              where: eq(users.id, bk.customerId),
+              columns: { email: true, firstName: true, phone: true },
+            });
+            if (!customer?.firstName) return;
+            if (toStatus === "driver_en_route" && customer.phone) {
+              await sendDriverEnRouteSms(customer.phone, customer.firstName, refCode);
+            } else if (toStatus === "driver_arrived" && customer.phone) {
+              await sendDriverArrivedSms(customer.phone, customer.firstName);
+            } else if (toStatus === "completed") {
+              if (customer.phone) await sendRideCompletedSms(customer.phone, customer.firstName);
+              if (customer.email) await sendRideCompletedEmail({ to: customer.email, firstName: customer.firstName, referenceCode: refCode });
+            }
+          } catch (err) {
+            console.error("[notify] ride status notification failed:", err);
+          }
+        })();
+      }
 
       return { success: true };
     }),

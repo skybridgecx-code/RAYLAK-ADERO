@@ -22,6 +22,7 @@ import type {
 import { env } from "./env";
 import { setupDispatchNamespace } from "./namespaces/dispatch";
 import { setupRidesNamespace } from "./namespaces/rides";
+import { setupTrackNamespace } from "./namespaces/track";
 import { startRedisSubscriber } from "./redis";
 
 const httpServer = http.createServer((req, res) => {
@@ -54,6 +55,7 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEve
 // Wire namespaces
 setupDispatchNamespace(io.of("/dispatch"));
 setupRidesNamespace(io.of("/rides"));
+setupTrackNamespace(io.of("/track"));
 
 // Start Redis subscriber — routes Redis messages to Socket.io rooms
 startRedisSubscriber(io);

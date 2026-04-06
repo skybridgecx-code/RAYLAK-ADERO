@@ -1,6 +1,13 @@
 "use server";
 
-import { db, aderoCompanyApplications, aderoOperatorApplications } from "@raylak/db";
+import {
+  aderoCompanyApplications,
+  aderoCompanyProfiles,
+  aderoOperatorApplications,
+  aderoOperatorProfiles,
+  db,
+  type AderoOperatorApplication,
+} from "@raylak/db";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { APPLICATION_STATUSES } from "~/lib/validators";
@@ -14,6 +21,147 @@ const UpdateStatusInput = z.object({
   status: z.enum(APPLICATION_STATUSES),
   reviewerName: z.string().optional(),
 });
+
+function buildOperatorServiceNotes(app: AderoOperatorApplication) {
+  const notes = [];
+
+  if (app.currentAffiliations) {
+    notes.push(`Current affiliations: ${app.currentAffiliations}`);
+  }
+
+  if (app.bio) {
+    notes.push(app.bio);
+  }
+
+  return notes.length > 0 ? notes.join("\n\n") : null;
+}
+
+async function updateCompanyStatus({
+  id,
+  status,
+  reviewedBy,
+  now,
+}: {
+  id: string;
+  status: (typeof APPLICATION_STATUSES)[number];
+  reviewedBy: string | null;
+  now: Date;
+}) {
+  await db.transaction(async (tx) => {
+    if (status !== "activated") {
+      await tx
+        .update(aderoCompanyApplications)
+        .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
+        .where(eq(aderoCompanyApplications.id, id));
+
+      await tx
+        .update(aderoCompanyProfiles)
+        .set({ activationStatus: status, updatedAt: now })
+        .where(eq(aderoCompanyProfiles.applicationId, id));
+
+      return;
+    }
+
+    const [app] = await tx
+      .select()
+      .from(aderoCompanyApplications)
+      .where(eq(aderoCompanyApplications.id, id));
+
+    if (!app) {
+      throw new Error("Company application not found.");
+    }
+
+    const activatedAt = app.activatedAt ?? now;
+    const profileValues = {
+      applicationId: app.id,
+      companyName: app.companyName,
+      serviceArea: app.serviceMarkets,
+      contactName: `${app.contactFirstName} ${app.contactLastName}`,
+      email: app.email,
+      phone: app.phone,
+      website: app.website,
+      fleetSize: app.fleetSize,
+      serviceNotes: app.overflowNeeds,
+      activationStatus: status,
+      activatedAt,
+      updatedAt: now,
+    };
+
+    await tx
+      .update(aderoCompanyApplications)
+      .set({ status, reviewedAt: now, updatedAt: now, reviewedBy, activatedAt })
+      .where(eq(aderoCompanyApplications.id, id));
+
+    await tx.insert(aderoCompanyProfiles).values(profileValues).onConflictDoUpdate({
+      target: aderoCompanyProfiles.applicationId,
+      set: profileValues,
+    });
+  });
+}
+
+async function updateOperatorStatus({
+  id,
+  status,
+  reviewedBy,
+  now,
+}: {
+  id: string;
+  status: (typeof APPLICATION_STATUSES)[number];
+  reviewedBy: string | null;
+  now: Date;
+}) {
+  await db.transaction(async (tx) => {
+    if (status !== "activated") {
+      await tx
+        .update(aderoOperatorApplications)
+        .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
+        .where(eq(aderoOperatorApplications.id, id));
+
+      await tx
+        .update(aderoOperatorProfiles)
+        .set({ activationStatus: status, updatedAt: now })
+        .where(eq(aderoOperatorProfiles.applicationId, id));
+
+      return;
+    }
+
+    const [app] = await tx
+      .select()
+      .from(aderoOperatorApplications)
+      .where(eq(aderoOperatorApplications.id, id));
+
+    if (!app) {
+      throw new Error("Operator application not found.");
+    }
+
+    const activatedAt = app.activatedAt ?? now;
+    const profileValues = {
+      applicationId: app.id,
+      fullName: `${app.firstName} ${app.lastName}`,
+      city: app.city,
+      state: app.state,
+      email: app.email,
+      phone: app.phone,
+      vehicleType: app.vehicleType,
+      vehicleYear: app.vehicleYear,
+      yearsExperience: app.yearsExperience,
+      serviceNotes: buildOperatorServiceNotes(app),
+      activationStatus: status,
+      activatedAt,
+      updatedAt: now,
+    };
+
+    await tx
+      .update(aderoOperatorApplications)
+      .set({ status, reviewedAt: now, updatedAt: now, reviewedBy, activatedAt })
+      .where(eq(aderoOperatorApplications.id, id));
+
+    await tx.insert(aderoOperatorProfiles).values(profileValues).onConflictDoUpdate({
+      target: aderoOperatorProfiles.applicationId,
+      set: profileValues,
+    });
+  });
+}
 
 export async function updateApplicationStatus(
   _prev: { error: string | null },
@@ -36,29 +184,9 @@ export async function updateApplicationStatus(
 
   try {
     if (type === "company") {
-      if (status === "activated") {
-        await db
-          .update(aderoCompanyApplications)
-          .set({ status, reviewedAt: now, updatedAt: now, reviewedBy, activatedAt: now })
-          .where(eq(aderoCompanyApplications.id, id));
-      } else {
-        await db
-          .update(aderoCompanyApplications)
-          .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
-          .where(eq(aderoCompanyApplications.id, id));
-      }
+      await updateCompanyStatus({ id, status, reviewedBy, now });
     } else {
-      if (status === "activated") {
-        await db
-          .update(aderoOperatorApplications)
-          .set({ status, reviewedAt: now, updatedAt: now, reviewedBy, activatedAt: now })
-          .where(eq(aderoOperatorApplications.id, id));
-      } else {
-        await db
-          .update(aderoOperatorApplications)
-          .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
-          .where(eq(aderoOperatorApplications.id, id));
-      }
+      await updateOperatorStatus({ id, status, reviewedBy, now });
     }
   } catch (err) {
     console.error("[adero] updateApplicationStatus failed:", err);
@@ -67,6 +195,9 @@ export async function updateApplicationStatus(
 
   revalidatePath(`/admin/${type}/${id}`);
   revalidatePath("/admin");
+  revalidatePath("/admin/profiles");
+  revalidatePath("/admin/profiles/companies");
+  revalidatePath("/admin/profiles/operators");
   return { error: null };
 }
 

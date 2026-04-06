@@ -6,3 +6,4 @@ export * from "./booking-stops";
 export * from "./booking-status-log";
 export * from "./notifications";
 export * from "./adero-applications";
+export * from "./adero-profiles";

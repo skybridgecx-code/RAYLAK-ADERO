@@ -4,19 +4,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen" style={{ background: "#0f172a", color: "#f1f5f9" }}>
       <header
-        className="border-b sticky top-0 z-10"
+        className="sticky top-0 z-10 border-b"
         style={{ background: "#0c1425", borderColor: "rgba(255,255,255,0.07)" }}
       >
-        <div className="mx-auto max-w-7xl px-6 py-3 flex items-center gap-6">
-          <Link href="/admin" className="flex items-center gap-2 shrink-0">
+        <div className="mx-auto flex max-w-7xl items-center gap-6 px-6 py-3">
+          <Link href="/admin" className="flex shrink-0 items-center gap-2">
             <span
-              className="text-sm font-bold tracking-widest uppercase"
+              className="text-sm font-bold uppercase tracking-widest"
               style={{ color: "#6366f1" }}
             >
               Adero
             </span>
             <span
-              className="text-xs tracking-wider uppercase font-medium"
+              className="text-xs font-medium uppercase tracking-wider"
               style={{ color: "rgba(255,255,255,0.25)" }}
             >
               Admin
@@ -30,6 +30,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               style={{ color: "rgba(255,255,255,0.55)" }}
             >
               Applications
+            </Link>
+            <Link
+              href="/admin/profiles"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Members
             </Link>
           </nav>
 

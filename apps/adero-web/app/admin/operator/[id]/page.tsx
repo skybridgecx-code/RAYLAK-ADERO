@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { db, aderoOperatorApplications } from "@raylak/db";
+import { db, aderoOperatorApplications, aderoOperatorProfiles } from "@raylak/db";
 import { eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
 import { VEHICLE_TYPE_LABELS, type VehicleType } from "~/lib/validators";
@@ -27,7 +27,7 @@ function fmt(date: Date | null) {
 
 function Row({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
-    <div className="flex gap-4 py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+    <div className="flex gap-4 border-b py-3" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
       <dt className="w-40 shrink-0 text-xs font-medium" style={{ color: "#475569" }}>
         {label}
       </dt>
@@ -38,16 +38,12 @@ function Row({ label, value }: { label: string; value: string | number | null | 
   );
 }
 
-export default async function OperatorDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function OperatorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [app] = await db
-    .select()
-    .from(aderoOperatorApplications)
-    .where(eq(aderoOperatorApplications.id, id));
+  const [[app], [profile]] = await Promise.all([
+    db.select().from(aderoOperatorApplications).where(eq(aderoOperatorApplications.id, id)),
+    db.select().from(aderoOperatorProfiles).where(eq(aderoOperatorProfiles.applicationId, id)),
+  ]);
 
   if (!app) notFound();
 
@@ -69,11 +65,11 @@ export default async function OperatorDetailPage({
       {/* Activated banner */}
       {app.status === "activated" && (
         <div
-          className="rounded-xl border px-5 py-4 flex items-center gap-3"
+          className="flex items-center gap-3 rounded-xl border px-5 py-4"
           style={{ borderColor: "rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.06)" }}
         >
           <span style={{ color: "#22c55e", fontSize: "1.1rem" }}>✓</span>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium" style={{ color: "#22c55e" }}>
               Applicant Activated
             </p>
@@ -82,13 +78,22 @@ export default async function OperatorDetailPage({
               {app.reviewedBy ? ` by ${app.reviewedBy}` : ""}
             </p>
           </div>
+          {profile && (
+            <Link
+              href={`/admin/profiles/operators/${profile.id}`}
+              className="shrink-0 rounded-lg px-3 py-2 text-xs font-semibold"
+              style={{ background: "rgba(34,197,94,0.14)", color: "#22c55e" }}
+            >
+              Open profile
+            </Link>
+          )}
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-start gap-4 flex-wrap">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2">
             <span
               className="rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wider"
               style={{ background: "rgba(20,184,166,0.12)", color: "#2dd4bf" }}
@@ -100,20 +105,20 @@ export default async function OperatorDetailPage({
           <h1 className="text-2xl font-light tracking-tight" style={{ color: "#f1f5f9" }}>
             {app.firstName} {app.lastName}
           </h1>
-          <p className="text-sm mt-1" style={{ color: "#475569" }}>
+          <p className="mt-1 text-sm" style={{ color: "#475569" }}>
             Submitted {fmt(app.submittedAt)}
             {app.reviewedAt && ` · Last reviewed ${fmt(app.reviewedAt)}`}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Application details — left 2/3 */}
-        <div className="lg:col-span-2 space-y-8">
+        <div className="space-y-8 lg:col-span-2">
           {/* Personal */}
           <section>
             <h2
-              className="text-xs font-semibold uppercase tracking-[3px] mb-4"
+              className="mb-4 text-xs font-semibold uppercase tracking-[3px]"
               style={{ color: "#475569" }}
             >
               Personal
@@ -128,7 +133,7 @@ export default async function OperatorDetailPage({
           {/* Location */}
           <section>
             <h2
-              className="text-xs font-semibold uppercase tracking-[3px] mb-4"
+              className="mb-4 text-xs font-semibold uppercase tracking-[3px]"
               style={{ color: "#475569" }}
             >
               Location
@@ -142,7 +147,7 @@ export default async function OperatorDetailPage({
           {/* Vehicle */}
           <section>
             <h2
-              className="text-xs font-semibold uppercase tracking-[3px] mb-4"
+              className="mb-4 text-xs font-semibold uppercase tracking-[3px]"
               style={{ color: "#475569" }}
             >
               Vehicle
@@ -156,7 +161,7 @@ export default async function OperatorDetailPage({
           {/* Experience */}
           <section>
             <h2
-              className="text-xs font-semibold uppercase tracking-[3px] mb-4"
+              className="mb-4 text-xs font-semibold uppercase tracking-[3px]"
               style={{ color: "#475569" }}
             >
               Experience
@@ -167,7 +172,7 @@ export default async function OperatorDetailPage({
             </dl>
             {app.bio && (
               <div
-                className="mt-4 rounded-lg border px-4 py-3 text-sm whitespace-pre-wrap"
+                className="mt-4 whitespace-pre-wrap rounded-lg border px-4 py-3 text-sm"
                 style={{
                   borderColor: "rgba(255,255,255,0.07)",
                   background: "rgba(255,255,255,0.02)",
@@ -182,7 +187,7 @@ export default async function OperatorDetailPage({
           {/* Notes history */}
           <section>
             <h2
-              className="text-xs font-semibold uppercase tracking-[3px] mb-4"
+              className="mb-4 text-xs font-semibold uppercase tracking-[3px]"
               style={{ color: "#475569" }}
             >
               Internal Notes
@@ -196,7 +201,7 @@ export default async function OperatorDetailPage({
                 {notes.map((n) => (
                   <div
                     key={n.key}
-                    className="rounded-lg border px-4 py-3 text-sm whitespace-pre-wrap"
+                    className="whitespace-pre-wrap rounded-lg border px-4 py-3 text-sm"
                     style={{
                       borderColor: "rgba(255,255,255,0.07)",
                       background: "rgba(255,255,255,0.02)",
@@ -214,13 +219,38 @@ export default async function OperatorDetailPage({
         {/* Actions sidebar — right 1/3 */}
         <div className="space-y-5">
           {/* Activate CTA — only when status is approved */}
-          {app.status === "approved" && (
-            <ActivateForm type="operator" id={app.id} />
+          {app.status === "approved" && <ActivateForm type="operator" id={app.id} />}
+
+          {profile && (
+            <div
+              className="rounded-xl border p-5"
+              style={{
+                borderColor: "rgba(34,197,94,0.25)",
+                background: "rgba(34,197,94,0.04)",
+              }}
+            >
+              <p
+                className="mb-2 text-xs font-semibold uppercase tracking-[3px]"
+                style={{ color: "#22c55e" }}
+              >
+                Network Profile
+              </p>
+              <p className="mb-4 text-xs" style={{ color: "#475569" }}>
+                This activated application has a persistent Adero member record.
+              </p>
+              <Link
+                href={`/admin/profiles/operators/${profile.id}`}
+                className="inline-flex rounded-lg px-4 py-2 text-sm font-medium"
+                style={{ background: "#22c55e", color: "#052e16" }}
+              >
+                View operator profile
+              </Link>
+            </div>
           )}
 
           {/* Status + note forms */}
           <div
-            className="rounded-xl border p-5 space-y-5"
+            className="space-y-5 rounded-xl border p-5"
             style={{
               borderColor: "rgba(255,255,255,0.08)",
               background: "rgba(255,255,255,0.02)",
@@ -233,26 +263,37 @@ export default async function OperatorDetailPage({
 
           {/* Metadata */}
           <div
-            className="rounded-xl border p-5 space-y-3"
+            className="space-y-3 rounded-xl border p-5"
             style={{
               borderColor: "rgba(255,255,255,0.08)",
               background: "rgba(255,255,255,0.02)",
             }}
           >
-            <p className="text-xs font-semibold uppercase tracking-[3px] mb-1" style={{ color: "#475569" }}>
+            <p
+              className="mb-1 text-xs font-semibold uppercase tracking-[3px]"
+              style={{ color: "#475569" }}
+            >
               Record
             </p>
             <p className="text-xs">
-              <span className="block" style={{ color: "#334155" }}>ID</span>
-              <span className="font-mono break-all" style={{ color: "#64748b" }}>{app.id}</span>
+              <span className="block" style={{ color: "#334155" }}>
+                ID
+              </span>
+              <span className="break-all font-mono" style={{ color: "#64748b" }}>
+                {app.id}
+              </span>
             </p>
             <p className="text-xs">
-              <span className="block" style={{ color: "#334155" }}>Submitted</span>
+              <span className="block" style={{ color: "#334155" }}>
+                Submitted
+              </span>
               <span style={{ color: "#64748b" }}>{fmt(app.submittedAt)}</span>
             </p>
             {app.reviewedAt && (
               <p className="text-xs">
-                <span className="block" style={{ color: "#334155" }}>Last reviewed</span>
+                <span className="block" style={{ color: "#334155" }}>
+                  Last reviewed
+                </span>
                 <span style={{ color: "#64748b" }}>
                   {fmt(app.reviewedAt)}
                   {app.reviewedBy ? ` by ${app.reviewedBy}` : ""}
@@ -261,7 +302,9 @@ export default async function OperatorDetailPage({
             )}
             {isActivated && app.activatedAt && (
               <p className="text-xs">
-                <span className="block" style={{ color: "#22c55e" }}>Activated</span>
+                <span className="block" style={{ color: "#22c55e" }}>
+                  Activated
+                </span>
                 <span style={{ color: "#64748b" }}>{fmt(app.activatedAt)}</span>
               </p>
             )}

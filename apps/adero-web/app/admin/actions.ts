@@ -12,6 +12,7 @@ const UpdateStatusInput = z.object({
   type: z.enum(["company", "operator"]),
   id: z.string().uuid(),
   status: z.enum(APPLICATION_STATUSES),
+  reviewerName: z.string().optional(),
 });
 
 export async function updateApplicationStatus(
@@ -22,26 +23,42 @@ export async function updateApplicationStatus(
     type: formData.get("type"),
     id: formData.get("id"),
     status: formData.get("status"),
+    reviewerName: formData.get("reviewerName") ?? undefined,
   });
 
   if (!result.success) {
     return { error: "Invalid input." };
   }
 
-  const { type, id, status } = result.data;
+  const { type, id, status, reviewerName } = result.data;
   const now = new Date();
+  const reviewedBy = reviewerName?.trim() || null;
 
   try {
     if (type === "company") {
-      await db
-        .update(aderoCompanyApplications)
-        .set({ status, reviewedAt: now, updatedAt: now })
-        .where(eq(aderoCompanyApplications.id, id));
+      if (status === "activated") {
+        await db
+          .update(aderoCompanyApplications)
+          .set({ status, reviewedAt: now, updatedAt: now, reviewedBy, activatedAt: now })
+          .where(eq(aderoCompanyApplications.id, id));
+      } else {
+        await db
+          .update(aderoCompanyApplications)
+          .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
+          .where(eq(aderoCompanyApplications.id, id));
+      }
     } else {
-      await db
-        .update(aderoOperatorApplications)
-        .set({ status, reviewedAt: now, updatedAt: now })
-        .where(eq(aderoOperatorApplications.id, id));
+      if (status === "activated") {
+        await db
+          .update(aderoOperatorApplications)
+          .set({ status, reviewedAt: now, updatedAt: now, reviewedBy, activatedAt: now })
+          .where(eq(aderoOperatorApplications.id, id));
+      } else {
+        await db
+          .update(aderoOperatorApplications)
+          .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
+          .where(eq(aderoOperatorApplications.id, id));
+      }
     }
   } catch (err) {
     console.error("[adero] updateApplicationStatus failed:", err);

@@ -110,7 +110,7 @@ export default async function AdminQueuePage({
       </div>
 
       {/* Count cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
         {APPLICATION_STATUSES.map((s) => (
           <Link
             key={s}

@@ -7,6 +7,7 @@ import { StatusBadge } from "~/components/status-badge";
 import { VEHICLE_TYPE_LABELS, type VehicleType } from "~/lib/validators";
 import { UpdateStatusForm } from "../../update-status-form";
 import { AddNoteForm } from "../../add-note-form";
+import { ActivateForm } from "../../activate-form";
 
 export const metadata: Metadata = {
   title: "Operator Application — Adero Admin",
@@ -56,12 +57,33 @@ export default async function OperatorDetailPage({
     ? app.internalNotes.split("\n---\n").map((n, i) => ({ key: i, text: n.trim() }))
     : [];
 
+  const isActivated = app.status === "approved" || app.status === "activated";
+
   return (
     <div className="space-y-8">
       {/* Back */}
       <Link href="/admin" className="text-xs transition-colors" style={{ color: "#475569" }}>
         ← Applications
       </Link>
+
+      {/* Activated banner */}
+      {app.status === "activated" && (
+        <div
+          className="rounded-xl border px-5 py-4 flex items-center gap-3"
+          style={{ borderColor: "rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.06)" }}
+        >
+          <span style={{ color: "#22c55e", fontSize: "1.1rem" }}>✓</span>
+          <div>
+            <p className="text-sm font-medium" style={{ color: "#22c55e" }}>
+              Applicant Activated
+            </p>
+            <p className="text-xs" style={{ color: "#475569" }}>
+              Activated {fmt(app.activatedAt)}
+              {app.reviewedBy ? ` by ${app.reviewedBy}` : ""}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-start gap-4 flex-wrap">
@@ -80,7 +102,7 @@ export default async function OperatorDetailPage({
           </h1>
           <p className="text-sm mt-1" style={{ color: "#475569" }}>
             Submitted {fmt(app.submittedAt)}
-            {app.reviewedAt && ` · Reviewed ${fmt(app.reviewedAt)}`}
+            {app.reviewedAt && ` · Last reviewed ${fmt(app.reviewedAt)}`}
           </p>
         </div>
       </div>
@@ -190,7 +212,13 @@ export default async function OperatorDetailPage({
         </div>
 
         {/* Actions sidebar — right 1/3 */}
-        <div className="space-y-6">
+        <div className="space-y-5">
+          {/* Activate CTA — only when status is approved */}
+          {app.status === "approved" && (
+            <ActivateForm type="operator" id={app.id} />
+          )}
+
+          {/* Status + note forms */}
           <div
             className="rounded-xl border p-5 space-y-5"
             style={{
@@ -205,32 +233,36 @@ export default async function OperatorDetailPage({
 
           {/* Metadata */}
           <div
-            className="rounded-xl border p-5 space-y-2"
+            className="rounded-xl border p-5 space-y-3"
             style={{
               borderColor: "rgba(255,255,255,0.08)",
               background: "rgba(255,255,255,0.02)",
             }}
           >
-            <p className="text-xs font-semibold uppercase tracking-[3px] mb-3" style={{ color: "#475569" }}>
+            <p className="text-xs font-semibold uppercase tracking-[3px] mb-1" style={{ color: "#475569" }}>
               Record
             </p>
-            <p className="text-xs" style={{ color: "#475569" }}>
-              <span style={{ color: "#334155" }}>ID</span>
-              <br />
-              <span className="font-mono text-xs break-all" style={{ color: "#64748b" }}>
-                {app.id}
-              </span>
+            <p className="text-xs">
+              <span className="block" style={{ color: "#334155" }}>ID</span>
+              <span className="font-mono break-all" style={{ color: "#64748b" }}>{app.id}</span>
             </p>
-            <p className="text-xs" style={{ color: "#475569" }}>
-              <span style={{ color: "#334155" }}>Submitted</span>
-              <br />
-              {fmt(app.submittedAt)}
+            <p className="text-xs">
+              <span className="block" style={{ color: "#334155" }}>Submitted</span>
+              <span style={{ color: "#64748b" }}>{fmt(app.submittedAt)}</span>
             </p>
             {app.reviewedAt && (
-              <p className="text-xs" style={{ color: "#475569" }}>
-                <span style={{ color: "#334155" }}>Last reviewed</span>
-                <br />
-                {fmt(app.reviewedAt)}
+              <p className="text-xs">
+                <span className="block" style={{ color: "#334155" }}>Last reviewed</span>
+                <span style={{ color: "#64748b" }}>
+                  {fmt(app.reviewedAt)}
+                  {app.reviewedBy ? ` by ${app.reviewedBy}` : ""}
+                </span>
+              </p>
+            )}
+            {isActivated && app.activatedAt && (
+              <p className="text-xs">
+                <span className="block" style={{ color: "#22c55e" }}>Activated</span>
+                <span style={{ color: "#64748b" }}>{fmt(app.activatedAt)}</span>
               </p>
             )}
           </div>

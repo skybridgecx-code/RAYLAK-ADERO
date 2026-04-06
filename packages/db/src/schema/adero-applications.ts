@@ -30,12 +30,14 @@ export const aderoCompanyApplications = pgTable(
     overflowNeeds: text("overflow_needs"),             // how they'd use overflow capacity
 
     // Internal review
-    status: text("status").notNull().default("pending"), // pending | under_review | approved | rejected
+    status: text("status").notNull().default("pending"), // pending | reviewing | approved | activated | rejected
     internalNotes: text("internal_notes"),
+    reviewedBy: text("reviewed_by"),      // name of the last reviewer who changed status
 
     // Timestamps
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -79,10 +81,12 @@ export const aderoOperatorApplications = pgTable(
     // Internal review
     status: text("status").notNull().default("pending"),
     internalNotes: text("internal_notes"),
+    reviewedBy: text("reviewed_by"),
 
     // Timestamps
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

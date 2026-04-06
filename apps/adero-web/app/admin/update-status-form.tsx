@@ -47,6 +47,28 @@ export function UpdateStatusForm({
         </select>
       </div>
 
+      <div>
+        <label
+          htmlFor="reviewer-name"
+          className="block text-xs font-semibold uppercase tracking-wider mb-2"
+          style={{ color: "#64748b" }}
+        >
+          Your name
+        </label>
+        <input
+          id="reviewer-name"
+          name="reviewerName"
+          type="text"
+          placeholder="Optional — for attribution"
+          className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+          style={{
+            borderColor: "rgba(255,255,255,0.12)",
+            background: "#1e293b",
+            color: "#f1f5f9",
+          }}
+        />
+      </div>
+
       {state.error && (
         <p className="text-xs" style={{ color: "#f87171" }}>
           {state.error}

@@ -58,13 +58,20 @@ export type OperatorApplicationInput = z.infer<typeof OperatorApplicationSchema>
 
 // ─── Application status workflow ─────────────────────────────────────────────
 
-export const APPLICATION_STATUSES = ["pending", "reviewing", "approved", "rejected"] as const;
+export const APPLICATION_STATUSES = [
+  "pending",
+  "reviewing",
+  "approved",
+  "activated",
+  "rejected",
+] as const;
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 
 export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   pending: "New",
   reviewing: "Reviewing",
   approved: "Approved",
+  activated: "Activated",
   rejected: "Rejected",
 };
 

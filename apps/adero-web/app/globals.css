@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* ─── Adero Brand Colors ────────────────────────────────────────────── */
+  /* Primary dark — deep slate, distinct from RAYLAK's navy */
+  --color-adero-dark: #0f172a;
+  --color-adero-dark-mid: #1e293b;
+  /* Accent — indigo; conveys network, platform, enterprise */
+  --color-adero-accent: #6366f1;
+  --color-adero-accent-light: #818cf8;
+  /* Neutral */
+  --color-adero-muted: #64748b;
+  --color-adero-border: #e2e8f0;
+
+  /* ─── Semantic tokens ───────────────────────────────────────────────── */
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+  --color-border: #e2e8f0;
+
+  /* ─── Radius ───────────────────────────────────────────────────────── */
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family:
+      "Helvetica Neue",
+      Helvetica,
+      Arial,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

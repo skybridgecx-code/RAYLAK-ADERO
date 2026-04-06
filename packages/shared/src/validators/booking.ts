@@ -102,3 +102,23 @@ export const ConfirmBookingSchema = z.object({
 });
 
 export type ConfirmBookingInput = z.infer<typeof ConfirmBookingSchema>;
+
+// ─── Operator assignment workflow ─────────────────────────────────────────────
+
+export const AssignBookingSchema = z.object({
+  bookingId: z.string().uuid(),
+  driverProfileId: z.string().uuid(),
+  vehicleId: z.string().uuid(),
+  note: z.string().max(2000).optional(),
+});
+
+export type AssignBookingInput = z.infer<typeof AssignBookingSchema>;
+
+// ─── Cancellation workflow ────────────────────────────────────────────────────
+
+export const CancelBookingSchema = z.object({
+  bookingId: z.string().uuid(),
+  reason: z.string().min(1, "A cancellation reason is required").max(2000),
+});
+
+export type CancelBookingInput = z.infer<typeof CancelBookingSchema>;

@@ -5,6 +5,9 @@ import { createServerCaller } from "~/lib/trpc/server";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { BookingQuoteForm } from "@/components/dashboard/booking-quote-form";
 import { BookingConfirmButton } from "@/components/dashboard/booking-confirm-button";
+import { BookingAssignForm } from "@/components/dashboard/booking-assign-form";
+import { BookingCancelForm } from "@/components/dashboard/booking-cancel-form";
+import { BOOKING_STATUS_TRANSITIONS } from "@raylak/shared/enums";
 import type { ServiceType } from "@raylak/shared/enums";
 
 interface PageProps {
@@ -59,6 +62,17 @@ export default async function BookingDetailPage({ params }: PageProps) {
 
   const canQuote = booking.status === "new_request";
   const canConfirm = booking.status === "quoted";
+  const canAssign = booking.status === "confirmed";
+  const canCancel = BOOKING_STATUS_TRANSITIONS[booking.status].includes("canceled");
+  const isAssigned = !!booking.assignedDriverId;
+
+  // Fetch drivers and vehicles in parallel only when needed
+  const [drivers, availableVehicles] = canAssign
+    ? await Promise.all([
+        caller.booking.getAvailableDrivers({ bookingId: id }),
+        caller.booking.getAvailableVehicles({ bookingId: id }),
+      ])
+    : [[], []];
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -131,6 +145,78 @@ export default async function BookingDetailPage({ params }: PageProps) {
             </dl>
           </section>
 
+          {/* Assigned driver + vehicle */}
+          {isAssigned && (
+            <section className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">Assignment</p>
+              </div>
+              <dl className="px-5">
+                <DetailRow
+                  label="Driver"
+                  value={
+                    booking.assignedDriverId ? (
+                      <div>
+                        <p className="font-medium">
+                          {`${booking.assignedDriverFirstName ?? ""} ${booking.assignedDriverLastName ?? ""}`.trim() || "—"}
+                        </p>
+                        {booking.assignedDriverEmail && (
+                          <p className="text-xs text-gray-400">{booking.assignedDriverEmail}</p>
+                        )}
+                        {booking.assignedDriverPhone && (
+                          <p className="text-xs text-gray-400">{booking.assignedDriverPhone}</p>
+                        )}
+                        <Link
+                          href={`/dashboard/drivers/${booking.assignedDriverId}`}
+                          className="text-xs text-[#c9a96e] hover:underline mt-0.5 inline-block"
+                        >
+                          View profile →
+                        </Link>
+                      </div>
+                    ) : null
+                  }
+                />
+                <DetailRow
+                  label="Vehicle"
+                  value={
+                    booking.assignedVehicleId ? (
+                      <div>
+                        <p className="font-medium">
+                          {booking.assignedVehicleYear} {booking.assignedVehicleMake} {booking.assignedVehicleModel}
+                          {booking.assignedVehicleColor ? ` · ${booking.assignedVehicleColor}` : ""}
+                        </p>
+                        {booking.assignedVehicleLicensePlate && (
+                          <p className="text-xs text-gray-400 font-mono">{booking.assignedVehicleLicensePlate}</p>
+                        )}
+                        <Link
+                          href={`/dashboard/vehicles/${booking.assignedVehicleId}`}
+                          className="text-xs text-[#c9a96e] hover:underline mt-0.5 inline-block"
+                        >
+                          View vehicle →
+                        </Link>
+                      </div>
+                    ) : null
+                  }
+                />
+              </dl>
+            </section>
+          )}
+
+          {/* Cancellation detail */}
+          {booking.status === "canceled" && booking.cancelReason && (
+            <section className="bg-white rounded-lg border border-red-100 overflow-hidden">
+              <div className="px-5 py-3 bg-red-50 border-b border-red-100">
+                <p className="text-xs font-semibold uppercase tracking-widest text-red-500">Cancellation</p>
+              </div>
+              <dl className="px-5">
+                {booking.canceledAt && (
+                  <DetailRow label="Canceled at" value={fmt(booking.canceledAt)} />
+                )}
+                <DetailRow label="Reason" value={booking.cancelReason} />
+              </dl>
+            </section>
+          )}
+
           {/* Status log */}
           {booking.statusLog.length > 0 && (
             <section className="bg-white rounded-lg border border-gray-100 overflow-hidden">
@@ -185,7 +271,33 @@ export default async function BookingDetailPage({ params }: PageProps) {
             </section>
           )}
 
-          {!canQuote && !canConfirm && (
+          {canAssign && (
+            <section className="bg-white rounded-lg border border-blue-200 overflow-hidden">
+              <div className="px-5 py-3 bg-blue-50 border-b border-blue-100">
+                <p className="text-xs font-semibold uppercase tracking-widest text-blue-700">Assign Driver &amp; Vehicle</p>
+              </div>
+              <div className="p-5">
+                <BookingAssignForm
+                  bookingId={booking.id}
+                  drivers={drivers}
+                  vehicles={availableVehicles}
+                />
+              </div>
+            </section>
+          )}
+
+          {canCancel && (
+            <section className="bg-white rounded-lg border border-red-100 overflow-hidden">
+              <div className="px-5 py-3 bg-red-50 border-b border-red-100">
+                <p className="text-xs font-semibold uppercase tracking-widest text-red-500">Cancel Booking</p>
+              </div>
+              <div className="p-5">
+                <BookingCancelForm bookingId={booking.id} />
+              </div>
+            </section>
+          )}
+
+          {!canQuote && !canConfirm && !canAssign && !canCancel && (
             <div className="bg-white rounded-lg border border-gray-100 p-5 text-center">
               <StatusBadge status={booking.status} />
               <p className="text-xs text-gray-400 mt-2">No actions available at this status.</p>

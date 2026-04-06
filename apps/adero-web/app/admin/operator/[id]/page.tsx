@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { db, aderoOperatorApplications, aderoOperatorProfiles } from "@raylak/db";
-import { eq } from "drizzle-orm";
+import { db, aderoAuditLogs, aderoOperatorApplications, aderoOperatorProfiles } from "@raylak/db";
+import { desc, eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
 import { VEHICLE_TYPE_LABELS, type VehicleType } from "~/lib/validators";
+import { AuditHistory } from "../../audit-history";
 import { UpdateStatusForm } from "../../update-status-form";
 import { AddNoteForm } from "../../add-note-form";
 import { ActivateForm } from "../../activate-form";
@@ -40,9 +41,15 @@ function Row({ label, value }: { label: string; value: string | number | null | 
 
 export default async function OperatorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [[app], [profile]] = await Promise.all([
+  const [[app], [profile], auditEntries] = await Promise.all([
     db.select().from(aderoOperatorApplications).where(eq(aderoOperatorApplications.id, id)),
     db.select().from(aderoOperatorProfiles).where(eq(aderoOperatorProfiles.applicationId, id)),
+    db
+      .select()
+      .from(aderoAuditLogs)
+      .where(eq(aderoAuditLogs.applicationId, id))
+      .orderBy(desc(aderoAuditLogs.createdAt))
+      .limit(25),
   ]);
 
   if (!app) notFound();
@@ -214,6 +221,8 @@ export default async function OperatorDetailPage({ params }: { params: Promise<{
               </div>
             )}
           </section>
+
+          <AuditHistory entries={auditEntries} />
         </div>
 
         {/* Actions sidebar — right 1/3 */}

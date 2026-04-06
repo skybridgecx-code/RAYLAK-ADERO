@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { db, aderoCompanyApplications, aderoCompanyProfiles } from "@raylak/db";
-import { eq } from "drizzle-orm";
+import { db, aderoAuditLogs, aderoCompanyApplications, aderoCompanyProfiles } from "@raylak/db";
+import { desc, eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
+import { AuditHistory } from "../../audit-history";
 import { UpdateStatusForm } from "../../update-status-form";
 import { AddNoteForm } from "../../add-note-form";
 import { ActivateForm } from "../../activate-form";
@@ -39,9 +40,15 @@ function Row({ label, value }: { label: string; value: string | number | null | 
 
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [[app], [profile]] = await Promise.all([
+  const [[app], [profile], auditEntries] = await Promise.all([
     db.select().from(aderoCompanyApplications).where(eq(aderoCompanyApplications.id, id)),
     db.select().from(aderoCompanyProfiles).where(eq(aderoCompanyProfiles.applicationId, id)),
+    db
+      .select()
+      .from(aderoAuditLogs)
+      .where(eq(aderoAuditLogs.applicationId, id))
+      .orderBy(desc(aderoAuditLogs.createdAt))
+      .limit(25),
   ]);
 
   if (!app) notFound();
@@ -186,6 +193,8 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
               </div>
             )}
           </section>
+
+          <AuditHistory entries={auditEntries} />
         </div>
 
         {/* Actions sidebar — right 1/3 */}

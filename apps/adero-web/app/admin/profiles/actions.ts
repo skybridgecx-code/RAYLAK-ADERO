@@ -1,6 +1,6 @@
 "use server";
 
-import { aderoCompanyProfiles, aderoOperatorProfiles, db } from "@raylak/db";
+import { aderoAuditLogs, aderoCompanyProfiles, aderoOperatorProfiles, db } from "@raylak/db";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { PROFILE_STATUSES, VEHICLE_TYPES } from "~/lib/validators";
@@ -28,6 +28,7 @@ const CompanyProfileInput = z.object({
     .or(z.literal("")),
   serviceNotes: z.string().trim().optional(),
   activationStatus: z.enum(PROFILE_STATUSES),
+  actorName: z.string().trim().optional(),
 });
 
 const OperatorProfileInput = z.object({
@@ -54,6 +55,7 @@ const OperatorProfileInput = z.object({
     .or(z.literal("")),
   serviceNotes: z.string().trim().optional(),
   activationStatus: z.enum(PROFILE_STATUSES),
+  actorName: z.string().trim().optional(),
 });
 
 function emptyToNull(value: string | null | undefined) {
@@ -62,6 +64,20 @@ function emptyToNull(value: string | null | undefined) {
 
 function optionalNumberToNull(value: number | "" | undefined) {
   return typeof value === "number" ? value : null;
+}
+
+function actorOrSystem(actorName: string | null | undefined) {
+  return actorName?.trim() || "Adero admin";
+}
+
+function changedFields(changes: Array<[string, unknown, unknown]>) {
+  return changes.filter(([, before, after]) => before !== after).map(([field]) => field);
+}
+
+function changeDetails(fields: string[]) {
+  return fields.length > 0
+    ? `Updated fields: ${fields.join(", ")}`
+    : "Saved without field changes.";
 }
 
 export async function updateCompanyProfile(
@@ -79,6 +95,7 @@ export async function updateCompanyProfile(
     fleetSize: formData.get("fleetSize") ?? "",
     serviceNotes: formData.get("serviceNotes") ?? undefined,
     activationStatus: formData.get("activationStatus"),
+    actorName: formData.get("actorName") ?? undefined,
   });
 
   if (!result.success) {
@@ -91,23 +108,65 @@ export async function updateCompanyProfile(
 
   const data = result.data;
   const now = new Date();
+  let applicationId: string | null = null;
+  const next = {
+    companyName: data.companyName,
+    serviceArea: data.serviceArea,
+    contactName: data.contactName,
+    email: data.email,
+    phone: emptyToNull(data.phone),
+    website: emptyToNull(data.website),
+    fleetSize: optionalNumberToNull(data.fleetSize),
+    serviceNotes: emptyToNull(data.serviceNotes),
+    activationStatus: data.activationStatus,
+  };
 
   try {
-    await db
-      .update(aderoCompanyProfiles)
-      .set({
-        companyName: data.companyName,
-        serviceArea: data.serviceArea,
-        contactName: data.contactName,
-        email: data.email,
-        phone: emptyToNull(data.phone),
-        website: emptyToNull(data.website),
-        fleetSize: optionalNumberToNull(data.fleetSize),
-        serviceNotes: emptyToNull(data.serviceNotes),
-        activationStatus: data.activationStatus,
-        updatedAt: now,
-      })
-      .where(eq(aderoCompanyProfiles.id, data.id));
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(aderoCompanyProfiles)
+        .where(eq(aderoCompanyProfiles.id, data.id));
+
+      if (!profile) throw new Error("Company profile not found.");
+      applicationId = profile.applicationId;
+
+      const fields = changedFields([
+        ["company name", profile.companyName, next.companyName],
+        ["service area", profile.serviceArea, next.serviceArea],
+        ["contact name", profile.contactName, next.contactName],
+        ["email", profile.email, next.email],
+        ["phone", profile.phone, next.phone],
+        ["website", profile.website, next.website],
+        ["fleet size", profile.fleetSize, next.fleetSize],
+        ["service notes", profile.serviceNotes, next.serviceNotes],
+        ["profile status", profile.activationStatus, next.activationStatus],
+      ]);
+
+      await tx
+        .update(aderoCompanyProfiles)
+        .set({ ...next, updatedAt: now })
+        .where(eq(aderoCompanyProfiles.id, data.id));
+
+      await tx.insert(aderoAuditLogs).values({
+        entityType: "company_profile",
+        entityId: profile.id,
+        applicationId: profile.applicationId,
+        companyApplicationId: profile.applicationId,
+        companyProfileId: profile.id,
+        action:
+          profile.activationStatus !== next.activationStatus
+            ? "profile_status_changed"
+            : "profile_updated",
+        actorName: actorOrSystem(data.actorName),
+        summary:
+          profile.activationStatus !== next.activationStatus
+            ? `Company profile status changed from ${profile.activationStatus} to ${next.activationStatus}.`
+            : `Company profile updated for ${next.companyName}.`,
+        details: changeDetails(fields),
+        createdAt: now,
+      });
+    });
   } catch (err) {
     console.error("[adero] updateCompanyProfile failed:", err);
     return { error: "Profile update failed. Please try again.", fieldErrors: {}, saved: false };
@@ -117,6 +176,9 @@ export async function updateCompanyProfile(
   revalidatePath("/admin/profiles/companies");
   revalidatePath(`/admin/profiles/companies/${data.id}`);
   revalidatePath(`/admin/profiles/companies/${data.id}/edit`);
+  if (applicationId) {
+    revalidatePath(`/admin/company/${applicationId}`);
+  }
   return { error: null, fieldErrors: {}, saved: true };
 }
 
@@ -136,6 +198,7 @@ export async function updateOperatorProfile(
     yearsExperience: formData.get("yearsExperience") ?? "",
     serviceNotes: formData.get("serviceNotes") ?? undefined,
     activationStatus: formData.get("activationStatus"),
+    actorName: formData.get("actorName") ?? undefined,
   });
 
   if (!result.success) {
@@ -148,24 +211,67 @@ export async function updateOperatorProfile(
 
   const data = result.data;
   const now = new Date();
+  let applicationId: string | null = null;
+  const next = {
+    fullName: data.fullName,
+    city: data.city,
+    state: emptyToNull(data.state),
+    email: data.email,
+    phone: emptyToNull(data.phone),
+    vehicleType: data.vehicleType,
+    vehicleYear: optionalNumberToNull(data.vehicleYear),
+    yearsExperience: optionalNumberToNull(data.yearsExperience),
+    serviceNotes: emptyToNull(data.serviceNotes),
+    activationStatus: data.activationStatus,
+  };
 
   try {
-    await db
-      .update(aderoOperatorProfiles)
-      .set({
-        fullName: data.fullName,
-        city: data.city,
-        state: emptyToNull(data.state),
-        email: data.email,
-        phone: emptyToNull(data.phone),
-        vehicleType: data.vehicleType,
-        vehicleYear: optionalNumberToNull(data.vehicleYear),
-        yearsExperience: optionalNumberToNull(data.yearsExperience),
-        serviceNotes: emptyToNull(data.serviceNotes),
-        activationStatus: data.activationStatus,
-        updatedAt: now,
-      })
-      .where(eq(aderoOperatorProfiles.id, data.id));
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select()
+        .from(aderoOperatorProfiles)
+        .where(eq(aderoOperatorProfiles.id, data.id));
+
+      if (!profile) throw new Error("Operator profile not found.");
+      applicationId = profile.applicationId;
+
+      const fields = changedFields([
+        ["full name", profile.fullName, next.fullName],
+        ["city", profile.city, next.city],
+        ["state", profile.state, next.state],
+        ["email", profile.email, next.email],
+        ["phone", profile.phone, next.phone],
+        ["vehicle type", profile.vehicleType, next.vehicleType],
+        ["vehicle year", profile.vehicleYear, next.vehicleYear],
+        ["years of experience", profile.yearsExperience, next.yearsExperience],
+        ["service notes", profile.serviceNotes, next.serviceNotes],
+        ["profile status", profile.activationStatus, next.activationStatus],
+      ]);
+
+      await tx
+        .update(aderoOperatorProfiles)
+        .set({ ...next, updatedAt: now })
+        .where(eq(aderoOperatorProfiles.id, data.id));
+
+      await tx.insert(aderoAuditLogs).values({
+        entityType: "operator_profile",
+        entityId: profile.id,
+        applicationId: profile.applicationId,
+        operatorApplicationId: profile.applicationId,
+        operatorProfileId: profile.id,
+        action:
+          profile.activationStatus !== next.activationStatus
+            ? "profile_status_changed"
+            : "profile_updated",
+        actorName: actorOrSystem(data.actorName),
+        summary:
+          profile.activationStatus !== next.activationStatus
+            ? `Operator profile status changed from ${profile.activationStatus} to ${next.activationStatus}.`
+            : `Operator profile updated for ${next.fullName}.`,
+        details: changeDetails(fields),
+        createdAt: now,
+      });
+    });
   } catch (err) {
     console.error("[adero] updateOperatorProfile failed:", err);
     return { error: "Profile update failed. Please try again.", fieldErrors: {}, saved: false };
@@ -175,5 +281,8 @@ export async function updateOperatorProfile(
   revalidatePath("/admin/profiles/operators");
   revalidatePath(`/admin/profiles/operators/${data.id}`);
   revalidatePath(`/admin/profiles/operators/${data.id}/edit`);
+  if (applicationId) {
+    revalidatePath(`/admin/operator/${applicationId}`);
+  }
   return { error: null, fieldErrors: {}, saved: true };
 }

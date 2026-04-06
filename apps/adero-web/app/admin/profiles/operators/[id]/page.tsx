@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { aderoOperatorApplications, aderoOperatorProfiles, db } from "@raylak/db";
-import { eq } from "drizzle-orm";
+import { aderoAuditLogs, aderoOperatorApplications, aderoOperatorProfiles, db } from "@raylak/db";
+import { desc, eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
 import {
   PROFILE_STATUS_LABELS,
@@ -10,6 +10,7 @@ import {
   type ProfileStatus,
   type VehicleType,
 } from "~/lib/validators";
+import { AuditHistory } from "../../../audit-history";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
 
 export const metadata: Metadata = {
@@ -21,17 +22,25 @@ export const dynamic = "force-dynamic";
 
 export default async function OperatorProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [row] = await db
-    .select({
-      profile: aderoOperatorProfiles,
-      application: aderoOperatorApplications,
-    })
-    .from(aderoOperatorProfiles)
-    .leftJoin(
-      aderoOperatorApplications,
-      eq(aderoOperatorProfiles.applicationId, aderoOperatorApplications.id),
-    )
-    .where(eq(aderoOperatorProfiles.id, id));
+  const [[row], auditEntries] = await Promise.all([
+    db
+      .select({
+        profile: aderoOperatorProfiles,
+        application: aderoOperatorApplications,
+      })
+      .from(aderoOperatorProfiles)
+      .leftJoin(
+        aderoOperatorApplications,
+        eq(aderoOperatorProfiles.applicationId, aderoOperatorApplications.id),
+      )
+      .where(eq(aderoOperatorProfiles.id, id)),
+    db
+      .select()
+      .from(aderoAuditLogs)
+      .where(eq(aderoAuditLogs.operatorProfileId, id))
+      .orderBy(desc(aderoAuditLogs.createdAt))
+      .limit(25),
+  ]);
 
   if (!row) notFound();
 
@@ -128,6 +137,8 @@ export default async function OperatorProfilePage({ params }: { params: Promise<
               </p>
             )}
           </section>
+
+          <AuditHistory entries={auditEntries} />
         </div>
 
         <div

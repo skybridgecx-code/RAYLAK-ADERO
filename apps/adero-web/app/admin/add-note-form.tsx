@@ -3,13 +3,7 @@
 import { useActionState, useRef } from "react";
 import { addApplicationNote } from "./actions";
 
-export function AddNoteForm({
-  type,
-  id,
-}: {
-  type: "company" | "operator";
-  id: string;
-}) {
+export function AddNoteForm({ type, id }: { type: "company" | "operator"; id: string }) {
   const [state, formAction, isPending] = useActionState(addApplicationNote, { error: null });
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -25,8 +19,30 @@ export function AddNoteForm({
 
       <div>
         <label
+          htmlFor="note-actor"
+          className="mb-2 block text-xs font-semibold uppercase tracking-wider"
+          style={{ color: "#64748b" }}
+        >
+          Your name
+        </label>
+        <input
+          id="note-actor"
+          name="actorName"
+          type="text"
+          placeholder="Optional — for audit history"
+          className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+          style={{
+            borderColor: "rgba(255,255,255,0.12)",
+            background: "#1e293b",
+            color: "#f1f5f9",
+          }}
+        />
+      </div>
+
+      <div>
+        <label
           htmlFor="note-textarea"
-          className="block text-xs font-semibold uppercase tracking-wider mb-2"
+          className="mb-2 block text-xs font-semibold uppercase tracking-wider"
           style={{ color: "#64748b" }}
         >
           Add Note
@@ -36,7 +52,7 @@ export function AddNoteForm({
           name="note"
           rows={3}
           placeholder="Internal note…"
-          className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none resize-y"
+          className="w-full resize-y rounded-lg border px-3 py-2.5 text-sm outline-none"
           style={{
             borderColor: state.error ? "#ef4444" : "rgba(255,255,255,0.12)",
             background: "#1e293b",
@@ -44,7 +60,7 @@ export function AddNoteForm({
           }}
         />
         {state.error && (
-          <p className="text-xs mt-1" style={{ color: "#f87171" }}>
+          <p className="mt-1 text-xs" style={{ color: "#f87171" }}>
             {state.error}
           </p>
         )}

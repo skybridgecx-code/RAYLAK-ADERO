@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { aderoCompanyApplications, aderoCompanyProfiles, db } from "@raylak/db";
-import { eq } from "drizzle-orm";
+import { aderoAuditLogs, aderoCompanyApplications, aderoCompanyProfiles, db } from "@raylak/db";
+import { desc, eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
 import { PROFILE_STATUS_LABELS, type ProfileStatus } from "~/lib/validators";
+import { AuditHistory } from "../../../audit-history";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
 
 export const metadata: Metadata = {
@@ -16,17 +17,25 @@ export const dynamic = "force-dynamic";
 
 export default async function CompanyProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [row] = await db
-    .select({
-      profile: aderoCompanyProfiles,
-      application: aderoCompanyApplications,
-    })
-    .from(aderoCompanyProfiles)
-    .leftJoin(
-      aderoCompanyApplications,
-      eq(aderoCompanyProfiles.applicationId, aderoCompanyApplications.id),
-    )
-    .where(eq(aderoCompanyProfiles.id, id));
+  const [[row], auditEntries] = await Promise.all([
+    db
+      .select({
+        profile: aderoCompanyProfiles,
+        application: aderoCompanyApplications,
+      })
+      .from(aderoCompanyProfiles)
+      .leftJoin(
+        aderoCompanyApplications,
+        eq(aderoCompanyProfiles.applicationId, aderoCompanyApplications.id),
+      )
+      .where(eq(aderoCompanyProfiles.id, id)),
+    db
+      .select()
+      .from(aderoAuditLogs)
+      .where(eq(aderoAuditLogs.companyProfileId, id))
+      .orderBy(desc(aderoAuditLogs.createdAt))
+      .limit(25),
+  ]);
 
   if (!row) notFound();
 
@@ -128,6 +137,8 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
               </p>
             )}
           </section>
+
+          <AuditHistory entries={auditEntries} />
         </div>
 
         <div

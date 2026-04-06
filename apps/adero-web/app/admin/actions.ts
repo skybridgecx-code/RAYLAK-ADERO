@@ -1,11 +1,13 @@
 "use server";
 
 import {
+  aderoAuditLogs,
   aderoCompanyApplications,
   aderoCompanyProfiles,
   aderoOperatorApplications,
   aderoOperatorProfiles,
   db,
+  type AderoCompanyApplication,
   type AderoOperatorApplication,
 } from "@raylak/db";
 import { eq } from "drizzle-orm";
@@ -36,6 +38,16 @@ function buildOperatorServiceNotes(app: AderoOperatorApplication) {
   return notes.length > 0 ? notes.join("\n\n") : null;
 }
 
+function actorOrSystem(actorName: string | null) {
+  return actorName || "Adero admin";
+}
+
+function applicationStatusSummary(fromStatus: string, toStatus: string) {
+  return fromStatus === toStatus
+    ? `Application status saved as ${toStatus}.`
+    : `Application status changed from ${fromStatus} to ${toStatus}.`;
+}
+
 async function updateCompanyStatus({
   id,
   status,
@@ -48,15 +60,6 @@ async function updateCompanyStatus({
   now: Date;
 }) {
   await db.transaction(async (tx) => {
-    if (status !== "activated") {
-      await tx
-        .update(aderoCompanyApplications)
-        .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
-        .where(eq(aderoCompanyApplications.id, id));
-
-      return;
-    }
-
     const [app] = await tx
       .select()
       .from(aderoCompanyApplications)
@@ -64,6 +67,27 @@ async function updateCompanyStatus({
 
     if (!app) {
       throw new Error("Company application not found.");
+    }
+
+    if (status !== "activated") {
+      await tx
+        .update(aderoCompanyApplications)
+        .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
+        .where(eq(aderoCompanyApplications.id, id));
+
+      await tx.insert(aderoAuditLogs).values({
+        entityType: "company_application",
+        entityId: app.id,
+        applicationId: app.id,
+        companyApplicationId: app.id,
+        action: "application_status_changed",
+        actorName: actorOrSystem(reviewedBy),
+        summary: applicationStatusSummary(app.status, status),
+        details: reviewedBy ? `Reviewer: ${reviewedBy}` : null,
+        createdAt: now,
+      });
+
+      return;
     }
 
     const activatedAt = app.activatedAt ?? now;
@@ -87,9 +111,29 @@ async function updateCompanyStatus({
       .set({ status, reviewedAt: now, updatedAt: now, reviewedBy, activatedAt })
       .where(eq(aderoCompanyApplications.id, id));
 
-    await tx.insert(aderoCompanyProfiles).values(profileValues).onConflictDoUpdate({
-      target: aderoCompanyProfiles.applicationId,
-      set: profileValues,
+    const [profile] = await tx
+      .insert(aderoCompanyProfiles)
+      .values(profileValues)
+      .onConflictDoUpdate({
+        target: aderoCompanyProfiles.applicationId,
+        set: profileValues,
+      })
+      .returning({ id: aderoCompanyProfiles.id });
+
+    await tx.insert(aderoAuditLogs).values({
+      entityType: "company_application",
+      entityId: app.id,
+      applicationId: app.id,
+      companyApplicationId: app.id,
+      companyProfileId: profile?.id ?? null,
+      action: "application_activated",
+      actorName: actorOrSystem(reviewedBy),
+      summary:
+        app.status === "activated"
+          ? "Company application activation refreshed."
+          : `Company application activated from ${app.status}.`,
+      details: profile?.id ? `Company profile: ${profile.id}` : null,
+      createdAt: now,
     });
   });
 }
@@ -106,15 +150,6 @@ async function updateOperatorStatus({
   now: Date;
 }) {
   await db.transaction(async (tx) => {
-    if (status !== "activated") {
-      await tx
-        .update(aderoOperatorApplications)
-        .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
-        .where(eq(aderoOperatorApplications.id, id));
-
-      return;
-    }
-
     const [app] = await tx
       .select()
       .from(aderoOperatorApplications)
@@ -122,6 +157,27 @@ async function updateOperatorStatus({
 
     if (!app) {
       throw new Error("Operator application not found.");
+    }
+
+    if (status !== "activated") {
+      await tx
+        .update(aderoOperatorApplications)
+        .set({ status, reviewedAt: now, updatedAt: now, reviewedBy })
+        .where(eq(aderoOperatorApplications.id, id));
+
+      await tx.insert(aderoAuditLogs).values({
+        entityType: "operator_application",
+        entityId: app.id,
+        applicationId: app.id,
+        operatorApplicationId: app.id,
+        action: "application_status_changed",
+        actorName: actorOrSystem(reviewedBy),
+        summary: applicationStatusSummary(app.status, status),
+        details: reviewedBy ? `Reviewer: ${reviewedBy}` : null,
+        createdAt: now,
+      });
+
+      return;
     }
 
     const activatedAt = app.activatedAt ?? now;
@@ -146,9 +202,29 @@ async function updateOperatorStatus({
       .set({ status, reviewedAt: now, updatedAt: now, reviewedBy, activatedAt })
       .where(eq(aderoOperatorApplications.id, id));
 
-    await tx.insert(aderoOperatorProfiles).values(profileValues).onConflictDoUpdate({
-      target: aderoOperatorProfiles.applicationId,
-      set: profileValues,
+    const [profile] = await tx
+      .insert(aderoOperatorProfiles)
+      .values(profileValues)
+      .onConflictDoUpdate({
+        target: aderoOperatorProfiles.applicationId,
+        set: profileValues,
+      })
+      .returning({ id: aderoOperatorProfiles.id });
+
+    await tx.insert(aderoAuditLogs).values({
+      entityType: "operator_application",
+      entityId: app.id,
+      applicationId: app.id,
+      operatorApplicationId: app.id,
+      operatorProfileId: profile?.id ?? null,
+      action: "application_activated",
+      actorName: actorOrSystem(reviewedBy),
+      summary:
+        app.status === "activated"
+          ? "Operator application activation refreshed."
+          : `Operator application activated from ${app.status}.`,
+      details: profile?.id ? `Operator profile: ${profile.id}` : null,
+      createdAt: now,
     });
   });
 }
@@ -197,7 +273,19 @@ const AddNoteInput = z.object({
   type: z.enum(["company", "operator"]),
   id: z.string().uuid(),
   note: z.string().min(1, "Note cannot be empty"),
+  actorName: z.string().optional(),
 });
+
+function applicationName(
+  type: "company" | "operator",
+  row: AderoCompanyApplication | AderoOperatorApplication,
+) {
+  return type === "company"
+    ? (row as AderoCompanyApplication).companyName
+    : `${(row as AderoOperatorApplication).firstName} ${
+        (row as AderoOperatorApplication).lastName
+      }`;
+}
 
 export async function addApplicationNote(
   _prev: { error: string | null },
@@ -207,39 +295,73 @@ export async function addApplicationNote(
     type: formData.get("type"),
     id: formData.get("id"),
     note: formData.get("note"),
+    actorName: formData.get("actorName") ?? undefined,
   });
 
   if (!result.success) {
     return { error: result.error.errors[0]?.message ?? "Invalid input." };
   }
 
-  const { type, id, note } = result.data;
+  const { type, id, note, actorName } = result.data;
   const now = new Date();
+  const actor = actorName?.trim() || null;
 
   try {
-    if (type === "company") {
-      const [row] = await db
-        .select({ internalNotes: aderoCompanyApplications.internalNotes })
-        .from(aderoCompanyApplications)
-        .where(eq(aderoCompanyApplications.id, id));
-      const existing = row?.internalNotes ?? null;
-      const newNotes = existing ? `${existing}\n---\n${note}` : note;
-      await db
-        .update(aderoCompanyApplications)
-        .set({ internalNotes: newNotes, updatedAt: now })
-        .where(eq(aderoCompanyApplications.id, id));
-    } else {
-      const [row] = await db
-        .select({ internalNotes: aderoOperatorApplications.internalNotes })
-        .from(aderoOperatorApplications)
-        .where(eq(aderoOperatorApplications.id, id));
-      const existing = row?.internalNotes ?? null;
-      const newNotes = existing ? `${existing}\n---\n${note}` : note;
-      await db
-        .update(aderoOperatorApplications)
-        .set({ internalNotes: newNotes, updatedAt: now })
-        .where(eq(aderoOperatorApplications.id, id));
-    }
+    await db.transaction(async (tx) => {
+      if (type === "company") {
+        const [row] = await tx
+          .select()
+          .from(aderoCompanyApplications)
+          .where(eq(aderoCompanyApplications.id, id));
+
+        if (!row) throw new Error("Company application not found.");
+
+        const existing = row.internalNotes ?? null;
+        const newNotes = existing ? `${existing}\n---\n${note}` : note;
+        await tx
+          .update(aderoCompanyApplications)
+          .set({ internalNotes: newNotes, updatedAt: now })
+          .where(eq(aderoCompanyApplications.id, id));
+
+        await tx.insert(aderoAuditLogs).values({
+          entityType: "company_application",
+          entityId: row.id,
+          applicationId: row.id,
+          companyApplicationId: row.id,
+          action: "application_note_added",
+          actorName: actorOrSystem(actor),
+          summary: `Internal note added to ${applicationName(type, row)}.`,
+          details: note,
+          createdAt: now,
+        });
+      } else {
+        const [row] = await tx
+          .select()
+          .from(aderoOperatorApplications)
+          .where(eq(aderoOperatorApplications.id, id));
+
+        if (!row) throw new Error("Operator application not found.");
+
+        const existing = row.internalNotes ?? null;
+        const newNotes = existing ? `${existing}\n---\n${note}` : note;
+        await tx
+          .update(aderoOperatorApplications)
+          .set({ internalNotes: newNotes, updatedAt: now })
+          .where(eq(aderoOperatorApplications.id, id));
+
+        await tx.insert(aderoAuditLogs).values({
+          entityType: "operator_application",
+          entityId: row.id,
+          applicationId: row.id,
+          operatorApplicationId: row.id,
+          action: "application_note_added",
+          actorName: actorOrSystem(actor),
+          summary: `Internal note added to ${applicationName(type, row)}.`,
+          details: note,
+          createdAt: now,
+        });
+      }
+    });
   } catch (err) {
     console.error("[adero] addApplicationNote failed:", err);
     return { error: "Failed to save note. Please try again." };

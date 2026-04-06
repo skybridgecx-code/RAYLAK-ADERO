@@ -26,6 +26,8 @@ export interface BookingAssignedEvent {
   bookingId: string;
   referenceCode: string;
   driverProfileId: string;
+  /** The driver's users.id (not clerkId) — used to push to driver:{driverUserId} Socket.io room */
+  driverUserId: string;
   vehicleId: string;
   actorId: string | null;
   ts: number;

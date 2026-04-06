@@ -641,6 +641,7 @@ export const bookingRouter = createTRPCRouter({
       bookingId: input.bookingId,
       referenceCode: booking.referenceCode,
       driverProfileId: input.driverProfileId,
+      driverUserId: driverProfile.userId,
       vehicleId: input.vehicleId,
       actorId,
     });

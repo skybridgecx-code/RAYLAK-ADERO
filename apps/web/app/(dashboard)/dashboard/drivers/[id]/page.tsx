@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServerCaller } from "~/lib/trpc/server";
 import { DriverForm } from "@/components/dashboard/driver-form";
+import { DriverClerkLink } from "@/components/dashboard/driver-clerk-link";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -24,11 +25,17 @@ export default async function EditDriverPage({ params }: PageProps) {
   const caller = await createServerCaller();
 
   let driver: Awaited<ReturnType<typeof caller.driver.getById>>;
+  let status: Awaited<ReturnType<typeof caller.driver.getStatus>>;
   try {
-    driver = await caller.driver.getById({ id });
+    [driver, status] = await Promise.all([
+      caller.driver.getById({ id }),
+      caller.driver.getStatus({ id }),
+    ]);
   } catch {
     notFound();
   }
+
+  const hasLocation = status.lastLat !== null && status.lastLng !== null;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -51,6 +58,49 @@ export default async function EditDriverPage({ params }: PageProps) {
         </div>
         <p className="text-xs text-gray-400 mt-0.5">{driver.email}</p>
       </div>
+
+      {/* Last known location */}
+      {hasLocation && (
+        <div className="bg-white rounded-lg border border-gray-100 p-6 space-y-2">
+          <h2 className="text-sm font-semibold text-[#0c1830]">Last Known Location</h2>
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <span className="text-gray-400">Coordinates</span>
+              <p className="font-mono text-gray-700 mt-0.5">
+                {Number(status.lastLat).toFixed(6)}, {Number(status.lastLng).toFixed(6)}
+              </p>
+            </div>
+            {status.lastSpeed !== null && (
+              <div>
+                <span className="text-gray-400">Speed</span>
+                <p className="text-gray-700 mt-0.5">{Number(status.lastSpeed).toFixed(0)} km/h</p>
+              </div>
+            )}
+            {status.lastHeading !== null && (
+              <div>
+                <span className="text-gray-400">Heading</span>
+                <p className="text-gray-700 mt-0.5">{status.lastHeading}°</p>
+              </div>
+            )}
+            {status.lastLocationAt && (
+              <div>
+                <span className="text-gray-400">Updated</span>
+                <p className="text-gray-700 mt-0.5">
+                  {new Date(status.lastLocationAt).toLocaleString()}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Clerk account link */}
+      <DriverClerkLink
+        driverProfileId={id}
+        currentClerkId={status.clerkId}
+      />
+
+      {/* Edit form */}
       <div className="bg-white rounded-lg border border-gray-100 p-6">
         <DriverForm driver={driver} />
       </div>

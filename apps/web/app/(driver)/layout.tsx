@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { requireRole } from "~/lib/auth";
 import { DriverBottomTabs } from "@/components/driver/driver-bottom-tabs";
+import { DriverRealtime } from "@/components/driver/driver-realtime";
 
 export const metadata: Metadata = {
   title: {
@@ -32,6 +33,9 @@ export default async function DriverLayout({ children }: { children: React.React
           Driver
         </span>
       </header>
+
+      {/* Invisible client shell: location tracking + realtime event subscription */}
+      <DriverRealtime />
 
       {/* Page content — leave room for bottom nav */}
       <main className="flex-1 overflow-y-auto pb-20">{children}</main>

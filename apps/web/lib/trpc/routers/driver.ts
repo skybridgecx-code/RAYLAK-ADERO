@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "@raylak/db";
 import { driverProfiles, users, vehicles } from "@raylak/db";
 import { DriverSchema } from "@raylak/shared/validators";
-import { createTRPCRouter, dispatcherProcedure } from "../trpc";
+import { createTRPCRouter, dispatcherProcedure, adminProcedure } from "../trpc";
 
 export const driverRouter = createTRPCRouter({
   list: dispatcherProcedure
@@ -95,6 +95,82 @@ export const driverRouter = createTRPCRouter({
 
       if (!row) throw new TRPCError({ code: "NOT_FOUND" });
       return row;
+    }),
+
+  /**
+   * Expose Clerk link status + location for the operator detail page.
+   * Separate query so getById stays lean for the edit form.
+   */
+  getStatus: dispatcherProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const [row] = await db
+        .select({
+          id: driverProfiles.id,
+          userId: driverProfiles.userId,
+          clerkId: users.clerkId,
+          availabilityStatus: driverProfiles.availabilityStatus,
+          isOnline: driverProfiles.isOnline,
+          lastLat: driverProfiles.lastLat,
+          lastLng: driverProfiles.lastLng,
+          lastHeading: driverProfiles.lastHeading,
+          lastSpeed: driverProfiles.lastSpeed,
+          lastLocationAt: driverProfiles.lastLocationAt,
+        })
+        .from(driverProfiles)
+        .leftJoin(users, eq(driverProfiles.userId, users.id))
+        .where(eq(driverProfiles.id, input.id))
+        .limit(1);
+
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+      return row;
+    }),
+
+  /**
+   * Manually link a driver's user record to a Clerk account.
+   * Used by operators when automatic email-based linking hasn't triggered
+   * (e.g., driver signed up with a different email on Clerk).
+   * Admin-only: mutating auth linkage is higher privilege than dispatch ops.
+   */
+  setClerkId: adminProcedure
+    .input(
+      z.object({
+        driverProfileId: z.string().uuid(),
+        /** Clerk user ID (starts with "user_") or empty string to unlink */
+        clerkId: z.string().regex(/^(user_[a-zA-Z0-9]+)?$/, {
+          message: 'Clerk user ID must start with "user_" or be empty to unlink.',
+        }),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const profile = await db.query.driverProfiles.findFirst({
+        where: eq(driverProfiles.id, input.driverProfileId),
+        columns: { userId: true },
+      });
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const clerkIdValue = input.clerkId === "" ? null : input.clerkId;
+
+      // Guard: don't allow a clerkId that's already assigned to a different user
+      if (clerkIdValue) {
+        const conflict = await db.query.users.findFirst({
+          where: eq(users.clerkId, clerkIdValue),
+          columns: { id: true },
+        });
+        if (conflict && conflict.id !== profile.userId) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This Clerk ID is already linked to a different user account.",
+          });
+        }
+      }
+
+      await db
+        .update(users)
+        .set({ clerkId: clerkIdValue, updatedAt: new Date() })
+        .where(eq(users.id, profile.userId));
+
+      return { success: true };
     }),
 
   create: dispatcherProcedure.input(DriverSchema).mutation(async ({ input }) => {

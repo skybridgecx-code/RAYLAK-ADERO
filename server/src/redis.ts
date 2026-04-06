@@ -39,6 +39,22 @@ function routeToDispatch(room: DispatchRoom, event: RaylakEvent): void {
   }
 }
 
+type RidesRoom = BroadcastOperator<ServerToClientEvents, SocketData>;
+
+/** Route assignment/status events to a specific driver's personal room */
+function routeToDriver(room: RidesRoom, event: RaylakEvent): void {
+  switch (event.type) {
+    case "booking.assigned":
+      room.emit("booking.assigned", event);
+      break;
+    case "booking.status_changed":
+      room.emit("booking.status_changed", event);
+      break;
+    default:
+      break;
+  }
+}
+
 export function startRedisSubscriber(
   io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
 ): void {
@@ -77,12 +93,11 @@ export function startRedisSubscriber(
     // Use type-safe routing via discriminated union
     routeToDispatch(io.of("/dispatch").to("ops"), event);
 
-    // For assignment events, also push to the specific driver's personal room
+    // Push assignment events to the specific driver's personal room
     if (event.type === "booking.assigned") {
-      // The driverProfileId is available; the driver's socket room is keyed to userId.
-      // Full driver targeting (by userId) is wired in Phase 7 once the DB lookup
-      // (driverProfileId → userId) is in place.  For now, the /rides namespace room
-      // is reserved and the dispatch namespace carries all operator events.
+      // driverUserId is embedded in the event payload (added in Phase 7)
+      // Drivers join room "driver:{userId}" at connection time in setupRidesNamespace
+      routeToDriver(io.of("/rides").to(`driver:${event.driverUserId}`), event);
     }
 
     if (env.NODE_ENV === "development") {

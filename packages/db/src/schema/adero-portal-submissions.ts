@@ -2,6 +2,15 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { aderoCompanyProfiles, aderoOperatorProfiles } from "./adero-profiles";
 
+export const ADERO_PORTAL_SUBMISSION_STATUSES = [
+  "pending",
+  "accepted",
+  "rejected",
+  "needs_follow_up",
+] as const;
+
+export type AderoPortalSubmissionStatus = (typeof ADERO_PORTAL_SUBMISSION_STATUSES)[number];
+
 /**
  * Member portal document submission records.
  *
@@ -26,7 +35,7 @@ export const aderoPortalSubmissions = pgTable(
     fileName: text("file_name"),     // original filename for display
     fileSizeBytes: integer("file_size_bytes"),
 
-    // pending | reviewed | dismissed
+    // pending | accepted | rejected | needs_follow_up
     status: text("status").notNull().default("pending"),
     reviewedBy: text("reviewed_by"),
     reviewNote: text("review_note"),
@@ -41,6 +50,10 @@ export const aderoPortalSubmissions = pgTable(
         ("member_type" = 'company' AND "company_profile_id" IS NOT NULL AND "operator_profile_id" IS NULL) OR
         ("member_type" = 'operator' AND "operator_profile_id" IS NOT NULL AND "company_profile_id" IS NULL)
       )`,
+    ),
+    check(
+      "adero_portal_submissions_status_chk",
+      sql`"status" IN ('pending', 'accepted', 'rejected', 'needs_follow_up')`,
     ),
     index("adero_portal_submissions_company_profile_idx").on(t.companyProfileId, t.createdAt),
     index("adero_portal_submissions_operator_profile_idx").on(t.operatorProfileId, t.createdAt),

@@ -21,13 +21,27 @@ function formatBytes(bytes: number): string {
 
 type StatusStyle = { label: string; bg: string; color: string };
 
-const STATUS_STYLES: Record<"pending" | "reviewed" | "dismissed", StatusStyle> = {
+const STATUS_STYLES: Record<
+  "pending" | "accepted" | "rejected" | "needs_follow_up" | "reviewed" | "dismissed",
+  StatusStyle
+> = {
   pending: { label: "Pending Review", bg: "rgba(234,179,8,0.12)", color: "#facc15" },
-  reviewed: { label: "Reviewed", bg: "rgba(34,197,94,0.12)", color: "#4ade80" },
-  dismissed: { label: "Dismissed", bg: "rgba(148,163,184,0.1)", color: "#64748b" },
+  accepted: { label: "Accepted", bg: "rgba(34,197,94,0.12)", color: "#4ade80" },
+  rejected: { label: "Rejected", bg: "rgba(239,68,68,0.12)", color: "#f87171" },
+  needs_follow_up: { label: "Needs Follow-Up", bg: "rgba(249,115,22,0.12)", color: "#fb923c" },
+  // Legacy statuses kept for backward-compatible rendering before migration runs.
+  reviewed: { label: "Accepted", bg: "rgba(34,197,94,0.12)", color: "#4ade80" },
+  dismissed: { label: "Rejected", bg: "rgba(239,68,68,0.12)", color: "#f87171" },
 };
 
 const FALLBACK_STATUS: StatusStyle = STATUS_STYLES.pending;
+
+function reviewContextPrefix(status: string) {
+  if (status === "accepted" || status === "reviewed") return "Accepted";
+  if (status === "rejected" || status === "dismissed") return "Rejected";
+  if (status === "needs_follow_up") return "Needs follow-up";
+  return "Reviewed";
+}
 
 export async function PortalSubmissionsPanel({
   submissions,
@@ -136,42 +150,53 @@ export async function PortalSubmissionsPanel({
               {/* Reviewed-by context */}
               {sub.status !== "pending" && sub.reviewedBy && (
                 <p className="text-[11px]" style={{ color: "#334155" }}>
-                  {sub.status === "reviewed" ? "Reviewed" : "Dismissed"} by {sub.reviewedBy}
+                  {reviewContextPrefix(sub.status)} by {sub.reviewedBy}
                   {sub.reviewNote ? ` — ${sub.reviewNote}` : ""}
                 </p>
               )}
 
               {/* Review actions — only for pending */}
               {sub.status === "pending" && (
-                <div className="flex flex-wrap gap-2">
-                  <form action={reviewPortalSubmission}>
-                    <input type="hidden" name="submissionId" value={sub.id} />
-                    <input type="hidden" name="newStatus" value="reviewed" />
-                    <input type="hidden" name="memberType" value={memberType} />
-                    <input type="hidden" name="profileId" value={profileId} />
-                    <button
-                      type="submit"
-                      className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-                      style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80" }}
-                    >
-                      Mark reviewed
-                    </button>
-                  </form>
-
-                  <form action={reviewPortalSubmission}>
-                    <input type="hidden" name="submissionId" value={sub.id} />
-                    <input type="hidden" name="newStatus" value="dismissed" />
-                    <input type="hidden" name="memberType" value={memberType} />
-                    <input type="hidden" name="profileId" value={profileId} />
-                    <button
-                      type="submit"
-                      className="rounded-md px-3 py-1.5 text-xs transition-opacity hover:opacity-60"
-                      style={{ color: "#475569" }}
-                    >
-                      Dismiss
-                    </button>
-                  </form>
-                </div>
+                <form action={reviewPortalSubmission} className="flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="submissionId" value={sub.id} />
+                  <input type="hidden" name="memberType" value={memberType} />
+                  <input type="hidden" name="profileId" value={profileId} />
+                  <input
+                    type="text"
+                    name="reviewNote"
+                    maxLength={300}
+                    placeholder="Optional review note"
+                    className="w-full rounded-md border bg-transparent px-2.5 py-1.5 text-xs outline-none sm:w-64"
+                    style={{ borderColor: "rgba(255,255,255,0.1)", color: "#cbd5e1" }}
+                  />
+                  <button
+                    type="submit"
+                    name="newStatus"
+                    value="accepted"
+                    className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                    style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80" }}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="submit"
+                    name="newStatus"
+                    value="needs_follow_up"
+                    className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                    style={{ background: "rgba(249,115,22,0.14)", color: "#fb923c" }}
+                  >
+                    Needs follow-up
+                  </button>
+                  <button
+                    type="submit"
+                    name="newStatus"
+                    value="rejected"
+                    className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+                    style={{ background: "rgba(239,68,68,0.14)", color: "#f87171" }}
+                  >
+                    Reject
+                  </button>
+                </form>
               )}
             </div>
           );

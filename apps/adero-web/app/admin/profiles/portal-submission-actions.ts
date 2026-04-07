@@ -1,13 +1,21 @@
 "use server";
 
-import { aderoAuditLogs, aderoPortalSubmissions, db } from "@raylak/db";
-import { eq } from "drizzle-orm";
+import {
+  aderoAuditLogs,
+  aderoCompanyProfiles,
+  aderoOperatorProfiles,
+  aderoPortalSubmissions,
+  db,
+} from "@raylak/db";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+const REVIEW_OUTCOMES = ["accepted", "rejected", "needs_follow_up"] as const;
+
 const ReviewInput = z.object({
   submissionId: z.string().uuid(),
-  newStatus: z.enum(["reviewed", "dismissed"]),
+  newStatus: z.enum(REVIEW_OUTCOMES),
   reviewedBy: z.string().trim().optional(),
   reviewNote: z.string().trim().optional(),
   memberType: z.enum(["company", "operator"]),
@@ -28,13 +36,38 @@ export async function reviewPortalSubmission(formData: FormData): Promise<void> 
 
   const { submissionId, newStatus, reviewedBy, reviewNote, memberType, profileId } = result.data;
   const actor = reviewedBy?.trim() || "Adero admin";
+  const note = reviewNote?.trim() || null;
   const now = new Date();
+  const statusLabel: Record<(typeof REVIEW_OUTCOMES)[number], string> = {
+    accepted: "was accepted",
+    rejected: "was rejected",
+    needs_follow_up: "requires follow-up",
+  };
 
   try {
     await db.transaction(async (tx) => {
+      const [submission] = await tx
+        .select({
+          id: aderoPortalSubmissions.id,
+          status: aderoPortalSubmissions.status,
+          documentType: aderoPortalSubmissions.documentType,
+        })
+        .from(aderoPortalSubmissions)
+        .where(
+          and(
+            eq(aderoPortalSubmissions.id, submissionId),
+            memberType === "company"
+              ? eq(aderoPortalSubmissions.companyProfileId, profileId)
+              : eq(aderoPortalSubmissions.operatorProfileId, profileId),
+          ),
+        )
+        .limit(1);
+
+      if (!submission || submission.status !== "pending") return;
+
       await tx
         .update(aderoPortalSubmissions)
-        .set({ status: newStatus, reviewedBy: actor, reviewNote: reviewNote ?? null, updatedAt: now })
+        .set({ status: newStatus, reviewedBy: actor, reviewNote: note, updatedAt: now })
         .where(eq(aderoPortalSubmissions.id, submissionId));
 
       await tx.insert(aderoAuditLogs).values({
@@ -44,7 +77,8 @@ export async function reviewPortalSubmission(formData: FormData): Promise<void> 
         operatorProfileId: memberType === "operator" ? profileId : null,
         action: `portal_submission_${newStatus}`,
         actorName: actor,
-        summary: `Portal document submission marked as ${newStatus}.`,
+        summary: `Portal submission for ${submission.documentType} ${statusLabel[newStatus]}.`,
+        details: note ? `Review note: ${note}` : null,
         createdAt: now,
       });
     });
@@ -59,4 +93,20 @@ export async function reviewPortalSubmission(formData: FormData): Promise<void> 
       : `/admin/profiles/operators/${profileId}`,
   );
   revalidatePath("/admin/submissions");
+
+  const [portalRow] = memberType === "company"
+    ? await db
+        .select({ portalToken: aderoCompanyProfiles.portalToken })
+        .from(aderoCompanyProfiles)
+        .where(eq(aderoCompanyProfiles.id, profileId))
+        .limit(1)
+    : await db
+        .select({ portalToken: aderoOperatorProfiles.portalToken })
+        .from(aderoOperatorProfiles)
+        .where(eq(aderoOperatorProfiles.id, profileId))
+        .limit(1);
+
+  if (portalRow?.portalToken) {
+    revalidatePath(`/portal/${portalRow.portalToken}`);
+  }
 }

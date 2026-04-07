@@ -66,8 +66,12 @@ const STATUS_DISPLAY: Record<
 
 const SUBMISSION_STATUS: Record<string, { label: string; color: string }> = {
   pending: { label: "Awaiting review", color: "#facc15" },
-  reviewed: { label: "Reviewed by staff", color: "#4ade80" },
-  dismissed: { label: "Dismissed", color: "#64748b" },
+  accepted: { label: "Accepted by staff", color: "#4ade80" },
+  rejected: { label: "Update rejected - submit a corrected document", color: "#f87171" },
+  needs_follow_up: { label: "Staff requested follow-up details", color: "#fb923c" },
+  // Legacy statuses kept for backward-compatible rendering before migration runs.
+  reviewed: { label: "Accepted by staff", color: "#4ade80" },
+  dismissed: { label: "Update rejected - submit a corrected document", color: "#f87171" },
 };
 
 // Actions that warrant a member-visible notice (without exposing internal detail)
@@ -364,8 +368,8 @@ export default async function MemberPortalPage({
             const docTypeLabel =
               MEMBER_DOCUMENT_TYPE_LABELS[entry.documentType as MemberDocumentType] ??
               entry.documentType;
-            const pendingSub = latestSubmission.get(entry.documentType);
-            const subStatus = pendingSub ? (SUBMISSION_STATUS[pendingSub.status] ?? null) : null;
+            const latestSub = latestSubmission.get(entry.documentType);
+            const subStatus = latestSub ? (SUBMISSION_STATUS[latestSub.status] ?? null) : null;
 
             return (
               <div
@@ -425,8 +429,8 @@ export default async function MemberPortalPage({
                     />
                     <p className="text-[11px]" style={{ color: subStatus.color }}>
                       {subStatus.label}
-                      {pendingSub?.createdAt
-                        ? ` · Submitted ${fmtTimestamp(pendingSub.createdAt)}`
+                      {latestSub?.createdAt
+                        ? ` · Submitted ${fmtTimestamp(latestSub.createdAt)}`
                         : ""}
                     </p>
                   </div>

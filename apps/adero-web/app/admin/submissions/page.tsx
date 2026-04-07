@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  ADERO_PORTAL_SUBMISSION_STATUSES,
   aderoCompanyProfiles,
   aderoOperatorProfiles,
   aderoPortalSubmissions,
   db,
 } from "@raylak/db";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { createPresignedGet } from "~/lib/s3";
 import {
   MEMBER_DOCUMENT_TYPE_LABELS,
@@ -41,16 +42,41 @@ function formatBytes(bytes: number): string {
 
 const STATUS_STYLES = {
   pending: { label: "Pending", bg: "rgba(234,179,8,0.12)", color: "#facc15" },
-  reviewed: { label: "Reviewed", bg: "rgba(34,197,94,0.12)", color: "#4ade80" },
-  dismissed: { label: "Dismissed", bg: "rgba(148,163,184,0.1)", color: "#64748b" },
+  accepted: { label: "Accepted", bg: "rgba(34,197,94,0.12)", color: "#4ade80" },
+  rejected: { label: "Rejected", bg: "rgba(239,68,68,0.12)", color: "#f87171" },
+  needs_follow_up: { label: "Needs Follow-Up", bg: "rgba(249,115,22,0.12)", color: "#fb923c" },
+  // Legacy statuses kept for backward-compatible rendering before migration runs.
+  reviewed: { label: "Accepted", bg: "rgba(34,197,94,0.12)", color: "#4ade80" },
+  dismissed: { label: "Rejected", bg: "rgba(239,68,68,0.12)", color: "#f87171" },
 } as const;
 
 type KnownStatus = keyof typeof STATUS_STYLES;
+const STATUS_FILTER_VALUES = [...ADERO_PORTAL_SUBMISSION_STATUSES, "all"] as const;
+type StatusFilter = (typeof STATUS_FILTER_VALUES)[number];
+
+function parseStatusFilter(value: string | undefined): StatusFilter {
+  return STATUS_FILTER_VALUES.includes(value as StatusFilter)
+    ? (value as StatusFilter)
+    : "pending";
+}
+
+function filterValuesForStatus(status: Exclude<StatusFilter, "all">): string[] {
+  if (status === "accepted") return ["accepted", "reviewed"];
+  if (status === "rejected") return ["rejected", "dismissed"];
+  return [status];
+}
 
 function statusStyle(status: string) {
   return status in STATUS_STYLES
     ? STATUS_STYLES[status as KnownStatus]
     : STATUS_STYLES.pending;
+}
+
+function reviewContextPrefix(status: string) {
+  if (status === "accepted" || status === "reviewed") return "Accepted";
+  if (status === "rejected" || status === "dismissed") return "Rejected";
+  if (status === "needs_follow_up") return "Needs follow-up";
+  return "Reviewed";
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -61,7 +87,7 @@ export default async function SubmissionsInboxPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const statusFilter = sp["status"] ?? "pending";
+  const statusFilter = parseStatusFilter(sp["status"]);
   const memberTypeFilter = sp["memberType"] ?? "";
   const docTypeFilter = sp["docType"] ?? "";
 
@@ -76,15 +102,24 @@ export default async function SubmissionsInboxPage({
     .where(countConditions.length > 0 ? and(...countConditions) : undefined)
     .groupBy(aderoPortalSubmissions.status);
 
-  const countOf = (s: string) => statusCounts.find((r) => r.status === s)?.n ?? 0;
+  const countOf = (...statuses: string[]) =>
+    statusCounts.reduce(
+      (total, row) => total + (statuses.includes(row.status) ? Number(row.n) : 0),
+      0,
+    );
   const pendingCount = countOf("pending");
-  const reviewedCount = countOf("reviewed");
-  const dismissedCount = countOf("dismissed");
-  const totalCount = pendingCount + reviewedCount + dismissedCount;
+  const acceptedCount = countOf("accepted", "reviewed");
+  const rejectedCount = countOf("rejected", "dismissed");
+  const needsFollowUpCount = countOf("needs_follow_up");
+  const totalCount = pendingCount + acceptedCount + rejectedCount + needsFollowUpCount;
 
   // ── Submissions with member names ─────────────────────────────────────────
   const listConditions = [];
-  if (statusFilter !== "all") listConditions.push(eq(aderoPortalSubmissions.status, statusFilter));
+  if (statusFilter !== "all") {
+    listConditions.push(
+      inArray(aderoPortalSubmissions.status, filterValuesForStatus(statusFilter)),
+    );
+  }
   if (memberTypeFilter) listConditions.push(eq(aderoPortalSubmissions.memberType, memberTypeFilter));
   if (docTypeFilter) listConditions.push(eq(aderoPortalSubmissions.documentType, docTypeFilter));
 
@@ -134,8 +169,9 @@ export default async function SubmissionsInboxPage({
 
   const STATUS_TABS = [
     { value: "pending", label: "Pending", count: pendingCount },
-    { value: "reviewed", label: "Reviewed", count: reviewedCount },
-    { value: "dismissed", label: "Dismissed", count: dismissedCount },
+    { value: "accepted", label: "Accepted", count: acceptedCount },
+    { value: "rejected", label: "Rejected", count: rejectedCount },
+    { value: "needs_follow_up", label: "Needs Follow-Up", count: needsFollowUpCount },
     { value: "all", label: "All", count: totalCount },
   ];
 
@@ -153,11 +189,12 @@ export default async function SubmissionsInboxPage({
       </div>
 
       {/* Summary cards */}
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-5">
         {[
           { label: "Pending", value: pendingCount, color: pendingCount > 0 ? "#facc15" : "#334155" },
-          { label: "Reviewed", value: reviewedCount, color: reviewedCount > 0 ? "#4ade80" : "#334155" },
-          { label: "Dismissed", value: dismissedCount, color: "#475569" },
+          { label: "Accepted", value: acceptedCount, color: acceptedCount > 0 ? "#4ade80" : "#334155" },
+          { label: "Rejected", value: rejectedCount, color: rejectedCount > 0 ? "#f87171" : "#334155" },
+          { label: "Needs Follow-Up", value: needsFollowUpCount, color: needsFollowUpCount > 0 ? "#fb923c" : "#334155" },
           { label: "Total", value: totalCount, color: "#64748b" },
         ].map(({ label, value, color }) => (
           <div
@@ -396,7 +433,7 @@ export default async function SubmissionsInboxPage({
                 {/* Review context (non-pending) */}
                 {sub.status !== "pending" && sub.reviewedBy && (
                   <p className="mt-2 text-[11px]" style={{ color: "#334155" }}>
-                    {sub.status === "reviewed" ? "Reviewed" : "Dismissed"} by {sub.reviewedBy}
+                    {reviewContextPrefix(sub.status)} by {sub.reviewedBy}
                     {sub.reviewNote ? ` — ${sub.reviewNote}` : ""}
                   </p>
                 )}
@@ -414,37 +451,48 @@ export default async function SubmissionsInboxPage({
                     </Link>
                   )}
 
-                  {/* Review/dismiss — pending only */}
+                  {/* Review outcomes — pending only */}
                   {sub.status === "pending" && profileId && (
-                    <>
-                      <form action={reviewPortalSubmission}>
-                        <input type="hidden" name="submissionId" value={sub.id} />
-                        <input type="hidden" name="newStatus" value="reviewed" />
-                        <input type="hidden" name="memberType" value={memberType} />
-                        <input type="hidden" name="profileId" value={profileId} />
-                        <button
-                          type="submit"
-                          className="rounded-md px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80"
-                          style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80" }}
-                        >
-                          Mark reviewed
-                        </button>
-                      </form>
-
-                      <form action={reviewPortalSubmission}>
-                        <input type="hidden" name="submissionId" value={sub.id} />
-                        <input type="hidden" name="newStatus" value="dismissed" />
-                        <input type="hidden" name="memberType" value={memberType} />
-                        <input type="hidden" name="profileId" value={profileId} />
-                        <button
-                          type="submit"
-                          className="rounded-md px-3 py-1 text-xs transition-opacity hover:opacity-60"
-                          style={{ color: "#475569" }}
-                        >
-                          Dismiss
-                        </button>
-                      </form>
-                    </>
+                    <form action={reviewPortalSubmission} className="flex flex-wrap items-center gap-2">
+                      <input type="hidden" name="submissionId" value={sub.id} />
+                      <input type="hidden" name="memberType" value={memberType} />
+                      <input type="hidden" name="profileId" value={profileId} />
+                      <input
+                        type="text"
+                        name="reviewNote"
+                        maxLength={300}
+                        placeholder="Optional review note"
+                        className="w-full rounded-md border bg-transparent px-2.5 py-1 text-xs outline-none sm:w-64"
+                        style={{ borderColor: "rgba(255,255,255,0.1)", color: "#cbd5e1" }}
+                      />
+                      <button
+                        type="submit"
+                        name="newStatus"
+                        value="accepted"
+                        className="rounded-md px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80"
+                        style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80" }}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="submit"
+                        name="newStatus"
+                        value="needs_follow_up"
+                        className="rounded-md px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80"
+                        style={{ background: "rgba(249,115,22,0.14)", color: "#fb923c" }}
+                      >
+                        Needs follow-up
+                      </button>
+                      <button
+                        type="submit"
+                        name="newStatus"
+                        value="rejected"
+                        className="rounded-md px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80"
+                        style={{ background: "rgba(239,68,68,0.14)", color: "#f87171" }}
+                      >
+                        Reject
+                      </button>
+                    </form>
                   )}
                 </div>
               </div>

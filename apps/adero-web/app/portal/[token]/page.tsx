@@ -6,6 +6,7 @@ import {
   aderoDocumentComplianceNotifications,
   aderoMemberDocuments,
   aderoOperatorProfiles,
+  aderoPortalSubmissions,
   db,
 } from "@raylak/db";
 import {
@@ -23,6 +24,7 @@ import {
   type ProfileStatus,
 } from "~/lib/validators";
 import { getCurrentComplianceAction } from "~/lib/document-compliance";
+import { PortalSubmitForm } from "./submit-form";
 
 export const metadata: Metadata = {
   title: "Member Status - Adero",
@@ -42,6 +44,14 @@ function fmtDate(value: string | null) {
   });
 }
 
+function fmtTimestamp(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 const STATUS_DISPLAY: Record<
   MemberDocumentDisplayStatus,
   { label: string; color: string; icon: string }
@@ -52,6 +62,12 @@ const STATUS_DISPLAY: Record<
   expired: { label: "Expired", color: "#f87171", icon: "✗" },
   missing: { label: "Missing", color: "#f87171", icon: "✗" },
   rejected: { label: "Action Required", color: "#f87171", icon: "✗" },
+};
+
+const SUBMISSION_STATUS: Record<string, { label: string; color: string }> = {
+  pending: { label: "Awaiting review", color: "#facc15" },
+  reviewed: { label: "Reviewed by staff", color: "#4ade80" },
+  dismissed: { label: "Dismissed", color: "#64748b" },
 };
 
 // Actions that warrant a member-visible notice (without exposing internal detail)
@@ -100,36 +116,49 @@ export default async function MemberPortalPage({
   const memberColor = companyProfile ? "#818cf8" : "#2dd4bf";
   const memberBg = companyProfile ? "rgba(99,102,241,0.12)" : "rgba(20,184,166,0.12)";
 
-  // ── Load documents + compliance notifications ────────────────────────────
-  const [documents, complianceNotifications] = await Promise.all([
-    companyProfile
-      ? db
-          .select()
-          .from(aderoMemberDocuments)
-          .where(eq(aderoMemberDocuments.companyProfileId, profileId))
-          .orderBy(desc(aderoMemberDocuments.updatedAt))
-      : db
-          .select()
-          .from(aderoMemberDocuments)
-          .where(eq(aderoMemberDocuments.operatorProfileId, profileId))
-          .orderBy(desc(aderoMemberDocuments.updatedAt)),
-    companyProfile
-      ? db
-          .select()
-          .from(aderoDocumentComplianceNotifications)
-          .where(eq(aderoDocumentComplianceNotifications.companyProfileId, profileId))
-          .orderBy(desc(aderoDocumentComplianceNotifications.createdAt))
-      : db
-          .select()
-          .from(aderoDocumentComplianceNotifications)
-          .where(eq(aderoDocumentComplianceNotifications.operatorProfileId, profileId))
-          .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
+  // ── Load data ────────────────────────────────────────────────────────────
+  const profileFilter = companyProfile
+    ? eq(aderoMemberDocuments.companyProfileId, profileId)
+    : eq(aderoMemberDocuments.operatorProfileId, profileId);
+
+  const notifFilter = companyProfile
+    ? eq(aderoDocumentComplianceNotifications.companyProfileId, profileId)
+    : eq(aderoDocumentComplianceNotifications.operatorProfileId, profileId);
+
+  const submissionFilter = companyProfile
+    ? eq(aderoPortalSubmissions.companyProfileId, profileId)
+    : eq(aderoPortalSubmissions.operatorProfileId, profileId);
+
+  const [documents, complianceNotifications, submissions] = await Promise.all([
+    db
+      .select()
+      .from(aderoMemberDocuments)
+      .where(profileFilter)
+      .orderBy(desc(aderoMemberDocuments.updatedAt)),
+    db
+      .select()
+      .from(aderoDocumentComplianceNotifications)
+      .where(notifFilter)
+      .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
+    db
+      .select()
+      .from(aderoPortalSubmissions)
+      .where(submissionFilter)
+      .orderBy(desc(aderoPortalSubmissions.createdAt)),
   ]);
 
   // ── Derive document status summary ───────────────────────────────────────
   const summary = getMemberDocumentSummary(memberType, documents);
   const profileStatusLabel =
     PROFILE_STATUS_LABELS[activationStatus as ProfileStatus] ?? activationStatus;
+
+  // Build latest submission map per documentType (ordered DESC, first = latest)
+  const latestSubmission = new Map<string, (typeof submissions)[0]>();
+  for (const sub of submissions) {
+    if (!latestSubmission.has(sub.documentType)) {
+      latestSubmission.set(sub.documentType, sub);
+    }
+  }
 
   // Required document status per type
   const requiredDocStatus = summary.requiredDocuments.map(({ documentType, document }) => {
@@ -151,16 +180,10 @@ export default async function MemberPortalPage({
       complianceAction as MemberDocumentComplianceAction,
     );
 
-    return {
-      documentType,
-      document,
-      displayStatus,
-      daysRemaining,
-      needsFollowUp,
-    };
+    return { documentType, document, displayStatus, daysRemaining, needsFollowUp };
   });
 
-  // Collect document types needing member attention (for notice block)
+  // Collect document types needing member attention
   const attentionTypes = requiredDocStatus
     .filter(
       (entry) =>
@@ -169,7 +192,9 @@ export default async function MemberPortalPage({
         entry.displayStatus === "expired" ||
         entry.displayStatus === "expiring_soon",
     )
-    .map((entry) => MEMBER_DOCUMENT_TYPE_LABELS[entry.documentType as MemberDocumentType]);
+    .map((entry) => entry.documentType as MemberDocumentType);
+
+  const attentionLabels = attentionTypes.map((t) => MEMBER_DOCUMENT_TYPE_LABELS[t]);
 
   const isAccountPaused = activationStatus === "paused";
   const isAccountInactive = activationStatus === "inactive";
@@ -268,7 +293,7 @@ export default async function MemberPortalPage({
                 {summary.missingRequiredCount + summary.expiredCount === 1 ? "s" : ""} attention.
               </p>
               <p className="mt-1 text-xs" style={{ color: "#64748b" }}>
-                Please review the requirements below and contact your Adero representative.
+                Please review the requirements below and submit an update using the form below.
               </p>
             </>
           )}
@@ -276,7 +301,7 @@ export default async function MemberPortalPage({
       )}
 
       {/* Follow-up notice */}
-      {attentionTypes.length > 0 && (
+      {attentionLabels.length > 0 && (
         <div
           className="rounded-xl border px-5 py-4 space-y-1"
           style={{ borderColor: "rgba(249,115,22,0.25)", background: "rgba(249,115,22,0.04)" }}
@@ -285,12 +310,13 @@ export default async function MemberPortalPage({
             Documentation follow-up requested
           </p>
           <p className="text-xs" style={{ color: "#94a3b8" }}>
-            The following document{attentionTypes.length > 1 ? "s require" : " requires"} your
+            The following document{attentionLabels.length > 1 ? "s require" : " requires"} your
             attention:{" "}
-            <span style={{ color: "#cbd5e1" }}>{attentionTypes.join(", ")}</span>.
+            <span style={{ color: "#cbd5e1" }}>{attentionLabels.join(", ")}</span>.
           </p>
           <p className="text-xs" style={{ color: "#64748b" }}>
-            Please contact your Adero representative to submit the required documentation.
+            Use the submission form below to let your Adero representative know what you are
+            providing.
           </p>
         </div>
       )}
@@ -317,58 +343,73 @@ export default async function MemberPortalPage({
             const docTypeLabel =
               MEMBER_DOCUMENT_TYPE_LABELS[entry.documentType as MemberDocumentType] ??
               entry.documentType;
+            const pendingSub = latestSubmission.get(entry.documentType);
+            const subStatus = pendingSub ? (SUBMISSION_STATUS[pendingSub.status] ?? null) : null;
 
             return (
               <div
                 key={entry.documentType}
-                className="flex items-center gap-4 border-b px-5 py-4 last:border-b-0"
+                className="border-b px-5 py-4 last:border-b-0"
                 style={{
                   borderColor: "rgba(255,255,255,0.05)",
                   background:
                     idx % 2 === 0 ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.005)",
                 }}
               >
-                {/* Status icon */}
-                <span
-                  className="shrink-0 text-base"
-                  style={{ color: statusDisplay.color, minWidth: "1.25rem", textAlign: "center" }}
-                >
-                  {statusDisplay.icon}
-                </span>
+                <div className="flex items-center gap-4">
+                  <span
+                    className="shrink-0 text-base"
+                    style={{ color: statusDisplay.color, minWidth: "1.25rem", textAlign: "center" }}
+                  >
+                    {statusDisplay.icon}
+                  </span>
 
-                {/* Document info */}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
-                    {docTypeLabel}
-                  </p>
-
-                  {entry.document ? (
-                    <p className="mt-0.5 text-xs" style={{ color: "#475569" }}>
-                      {entry.document.title}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
+                      {docTypeLabel}
                     </p>
-                  ) : null}
+                    {entry.document ? (
+                      <p className="mt-0.5 text-xs" style={{ color: "#475569" }}>
+                        {entry.document.title}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="shrink-0 text-right space-y-1">
+                    <p className="text-xs font-semibold" style={{ color: statusDisplay.color }}>
+                      {statusDisplay.label}
+                    </p>
+                    {entry.document?.expirationDate ? (
+                      <p className="text-[11px]" style={{ color: "#475569" }}>
+                        {entry.displayStatus === "expired"
+                          ? `Expired ${fmtDate(entry.document.expirationDate)}`
+                          : entry.displayStatus === "expiring_soon"
+                            ? `Expires ${fmtDate(entry.document.expirationDate)}${
+                                typeof entry.daysRemaining === "number"
+                                  ? ` · ${entry.daysRemaining} day${entry.daysRemaining === 1 ? "" : "s"}`
+                                  : ""
+                              }`
+                            : `Expires ${fmtDate(entry.document.expirationDate)}`}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
-                {/* Status + expiry */}
-                <div className="shrink-0 text-right space-y-1">
-                  <p className="text-xs font-semibold" style={{ color: statusDisplay.color }}>
-                    {statusDisplay.label}
-                  </p>
-
-                  {entry.document?.expirationDate ? (
-                    <p className="text-[11px]" style={{ color: "#475569" }}>
-                      {entry.displayStatus === "expired"
-                        ? `Expired ${fmtDate(entry.document.expirationDate)}`
-                        : entry.displayStatus === "expiring_soon"
-                          ? `Expires ${fmtDate(entry.document.expirationDate)}${
-                              typeof entry.daysRemaining === "number"
-                                ? ` · ${entry.daysRemaining} day${entry.daysRemaining === 1 ? "" : "s"}`
-                                : ""
-                            }`
-                          : `Expires ${fmtDate(entry.document.expirationDate)}`}
+                {/* Per-document submission status */}
+                {subStatus && (
+                  <div className="mt-2.5 flex items-center gap-1.5 pl-8">
+                    <span
+                      className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
+                      style={{ background: subStatus.color }}
+                    />
+                    <p className="text-[11px]" style={{ color: subStatus.color }}>
+                      {subStatus.label}
+                      {pendingSub?.createdAt
+                        ? ` · Submitted ${fmtTimestamp(pendingSub.createdAt)}`
+                        : ""}
                     </p>
-                  ) : null}
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -432,7 +473,10 @@ export default async function MemberPortalPage({
                       </p>
                     </div>
 
-                    <p className="shrink-0 text-xs font-semibold" style={{ color: statusDisplay.color }}>
+                    <p
+                      className="shrink-0 text-xs font-semibold"
+                      style={{ color: statusDisplay.color }}
+                    >
                       {statusDisplay.label}
                     </p>
                   </div>
@@ -443,13 +487,41 @@ export default async function MemberPortalPage({
         );
       })()}
 
+      {/* Submit document update — only when there are docs needing attention */}
+      {attentionTypes.length > 0 && !isAccountInactive && (
+        <section
+          className="rounded-xl border p-5 space-y-4"
+          style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
+        >
+          <div>
+            <h2
+              className="text-xs font-semibold uppercase tracking-[3px]"
+              style={{ color: "#475569" }}
+            >
+              Submit a Document Update
+            </h2>
+            <p className="mt-2 text-xs" style={{ color: "#475569" }}>
+              Let your Adero representative know what you are submitting. Include any reference
+              numbers, policy numbers, or details that will help with review.
+            </p>
+          </div>
+
+          <PortalSubmitForm
+            token={token}
+            memberType={memberType}
+            profileId={profileId}
+            attentionTypes={attentionTypes}
+          />
+        </section>
+      )}
+
       {/* Contact reminder */}
       <div
         className="rounded-xl border px-5 py-4"
         style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
       >
         <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
-          Need to submit documents or ask a question?
+          Need to ask a question or follow up?
         </p>
         <p className="mt-1 text-xs" style={{ color: "#475569" }}>
           Contact your Adero representative directly. Do not reply to automated messages.

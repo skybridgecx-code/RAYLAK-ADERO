@@ -12,3 +12,4 @@ export * from "./adero-document-compliance-notifications";
 export * from "./adero-compliance-assignments";
 export * from "./adero-compliance-review-notes";
 export * from "./adero-audit-logs";
+export * from "./adero-portal-submissions";

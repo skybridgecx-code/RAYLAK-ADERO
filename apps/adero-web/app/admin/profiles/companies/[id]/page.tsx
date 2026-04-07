@@ -7,6 +7,7 @@ import {
   aderoDocumentComplianceNotifications,
   aderoCompanyProfiles,
   aderoMemberDocuments,
+  aderoPortalSubmissions,
   db,
 } from "@raylak/db";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -17,6 +18,7 @@ import { AuditHistory } from "../../../audit-history";
 import { DocumentTracking } from "../../document-tracking";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
 import { PortalLinkPanel } from "../../portal-link-panel";
+import { PortalSubmissionsPanel } from "../../portal-submissions-panel";
 
 export const metadata: Metadata = {
   title: "Company Profile - Adero Admin",
@@ -29,7 +31,7 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
   const { id } = await params;
   const PORTAL_ACTIONS = ["portal_link_copied", "portal_link_shared", "portal_token_rotated"];
 
-  const [[row], auditEntries, documents, complianceNotifications, portalEvents] =
+  const [[row], auditEntries, documents, complianceNotifications, portalEvents, portalSubmissions] =
     await Promise.all([
       db
         .select({
@@ -69,6 +71,11 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
         )
         .orderBy(desc(aderoAuditLogs.createdAt))
         .limit(10),
+      db
+        .select()
+        .from(aderoPortalSubmissions)
+        .where(eq(aderoPortalSubmissions.companyProfileId, id))
+        .orderBy(desc(aderoPortalSubmissions.createdAt)),
     ]);
 
   if (!row) notFound();
@@ -253,6 +260,12 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
           memberName={profile.companyName}
           portalToken={profile.portalToken}
           recentEvents={portalEvents}
+        />
+
+        <PortalSubmissionsPanel
+          submissions={portalSubmissions}
+          memberType="company"
+          profileId={profile.id}
         />
       </div>
     </ProfileShell>

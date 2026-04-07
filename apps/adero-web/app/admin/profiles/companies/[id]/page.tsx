@@ -10,7 +10,7 @@ import {
 } from "@raylak/db";
 import { desc, eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
-import { REQUIRED_MEMBER_DOCUMENT_TYPES } from "~/lib/validators";
+import { getMemberDocumentSummary } from "~/lib/document-monitoring";
 import { PROFILE_STATUS_LABELS, type ProfileStatus } from "~/lib/validators";
 import { AuditHistory } from "../../../audit-history";
 import { DocumentTracking } from "../../document-tracking";
@@ -55,16 +55,7 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
   const { profile, application } = row;
   const profileStatusLabel =
     PROFILE_STATUS_LABELS[profile.activationStatus as ProfileStatus] ?? profile.activationStatus;
-  const trackedRequiredTypes = new Set(
-    documents
-      .map((document) => document.documentType)
-      .filter((documentType) =>
-        REQUIRED_MEMBER_DOCUMENT_TYPES.includes(
-          documentType as (typeof REQUIRED_MEMBER_DOCUMENT_TYPES)[number],
-        ),
-      ),
-  );
-  const missingRequiredCount = REQUIRED_MEMBER_DOCUMENT_TYPES.length - trackedRequiredTypes.size;
+  const documentSummary = getMemberDocumentSummary("company", documents);
 
   return (
     <ProfileShell backHref="/admin/profiles/companies" backLabel="<- Company profiles">
@@ -207,7 +198,17 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
                 Tracked documents
               </span>
               <span style={{ color: "#64748b" }}>
-                {documents.length} total / {missingRequiredCount} required missing
+                {documents.length} total / {documentSummary.presentRequiredCount}/
+                {documentSummary.requiredCount} required present
+              </span>
+            </p>
+            <p>
+              <span className="block" style={{ color: "#334155" }}>
+                Document issues
+              </span>
+              <span style={{ color: "#64748b" }}>
+                {documentSummary.missingRequiredCount} missing / {documentSummary.expiringSoonCount}{" "}
+                expiring soon / {documentSummary.expiredCount} expired
               </span>
             </p>
             <p>

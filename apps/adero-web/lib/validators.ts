@@ -113,14 +113,6 @@ export const MEMBER_DOCUMENT_TYPE_LABELS: Record<MemberDocumentType, string> = {
   other: "Other",
 };
 
-export const REQUIRED_MEMBER_DOCUMENT_TYPES = [
-  "insurance",
-  "license",
-  "permit",
-  "registration",
-  "contract",
-] as const;
-
 export const MEMBER_DOCUMENT_STATUSES = [
   "pending_review",
   "approved",
@@ -129,10 +121,11 @@ export const MEMBER_DOCUMENT_STATUSES = [
 ] as const;
 export type MemberDocumentStatus = (typeof MEMBER_DOCUMENT_STATUSES)[number];
 
-export type MemberDocumentDisplayStatus = MemberDocumentStatus | "missing";
+export type MemberDocumentDisplayStatus = MemberDocumentStatus | "missing" | "expiring_soon";
 
 export const MEMBER_DOCUMENT_STATUS_LABELS: Record<MemberDocumentDisplayStatus, string> = {
   missing: "Missing",
+  expiring_soon: "Expiring Soon",
   pending_review: "Pending Review",
   approved: "Approved",
   expired: "Expired",

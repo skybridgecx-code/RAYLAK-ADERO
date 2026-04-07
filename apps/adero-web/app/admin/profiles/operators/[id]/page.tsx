@@ -10,8 +10,8 @@ import {
 } from "@raylak/db";
 import { desc, eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
+import { getMemberDocumentSummary } from "~/lib/document-monitoring";
 import {
-  REQUIRED_MEMBER_DOCUMENT_TYPES,
   PROFILE_STATUS_LABELS,
   VEHICLE_TYPE_LABELS,
   type ProfileStatus,
@@ -63,16 +63,7 @@ export default async function OperatorProfilePage({ params }: { params: Promise<
     VEHICLE_TYPE_LABELS[profile.vehicleType as VehicleType] ?? profile.vehicleType;
   const profileStatusLabel =
     PROFILE_STATUS_LABELS[profile.activationStatus as ProfileStatus] ?? profile.activationStatus;
-  const trackedRequiredTypes = new Set(
-    documents
-      .map((document) => document.documentType)
-      .filter((documentType) =>
-        REQUIRED_MEMBER_DOCUMENT_TYPES.includes(
-          documentType as (typeof REQUIRED_MEMBER_DOCUMENT_TYPES)[number],
-        ),
-      ),
-  );
-  const missingRequiredCount = REQUIRED_MEMBER_DOCUMENT_TYPES.length - trackedRequiredTypes.size;
+  const documentSummary = getMemberDocumentSummary("operator", documents);
 
   return (
     <ProfileShell backHref="/admin/profiles/operators" backLabel="<- Operator profiles">
@@ -207,7 +198,17 @@ export default async function OperatorProfilePage({ params }: { params: Promise<
                 Tracked documents
               </span>
               <span style={{ color: "#64748b" }}>
-                {documents.length} total / {missingRequiredCount} required missing
+                {documents.length} total / {documentSummary.presentRequiredCount}/
+                {documentSummary.requiredCount} required present
+              </span>
+            </p>
+            <p>
+              <span className="block" style={{ color: "#334155" }}>
+                Document issues
+              </span>
+              <span style={{ color: "#64748b" }}>
+                {documentSummary.missingRequiredCount} missing / {documentSummary.expiringSoonCount}{" "}
+                expiring soon / {documentSummary.expiredCount} expired
               </span>
             </p>
             <p>

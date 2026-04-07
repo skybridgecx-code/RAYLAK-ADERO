@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { aderoCompanyProfiles, db } from "@raylak/db";
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import { aderoCompanyProfiles, aderoMemberDocuments, db } from "@raylak/db";
+import { getMemberDocumentSummary } from "~/lib/document-monitoring";
+import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
 import { PROFILE_STATUS_LABELS, PROFILE_STATUSES } from "~/lib/validators";
 import { EmptyState, fmt } from "../profile-parts";
@@ -43,6 +44,26 @@ export default async function CompanyProfilesPage({
     )
     .orderBy(desc(aderoCompanyProfiles.activatedAt))
     .limit(100);
+  const documents = rows.length
+    ? await db
+        .select()
+        .from(aderoMemberDocuments)
+        .where(
+          inArray(
+            aderoMemberDocuments.companyProfileId,
+            rows.map((profile) => profile.id),
+          ),
+        )
+        .orderBy(desc(aderoMemberDocuments.updatedAt))
+    : [];
+  const documentsByProfile = new Map<string, typeof documents>();
+
+  for (const document of documents) {
+    if (!document.companyProfileId) continue;
+    const existing = documentsByProfile.get(document.companyProfileId) ?? [];
+    existing.push(document);
+    documentsByProfile.set(document.companyProfileId, existing);
+  }
 
   return (
     <div className="space-y-8">
@@ -130,41 +151,60 @@ export default async function CompanyProfilesPage({
           className="overflow-hidden rounded-xl border"
           style={{ borderColor: "rgba(255,255,255,0.07)" }}
         >
-          {rows.map((profile) => (
-            <Link
-              key={profile.id}
-              href={`/admin/profiles/companies/${profile.id}`}
-              className="flex items-center gap-4 border-b px-5 py-4 transition-colors last:border-b-0 hover:bg-white/[0.03]"
-              style={{
-                borderColor: "rgba(255,255,255,0.05)",
-                background: "rgba(255,255,255,0.01)",
-              }}
-            >
-              <span
-                className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wider"
-                style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8" }}
-              >
-                Co
-              </span>
+          {rows.map((profile) =>
+            (() => {
+              const documentSummary = getMemberDocumentSummary(
+                "company",
+                documentsByProfile.get(profile.id) ?? [],
+              );
 
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium" style={{ color: "#f1f5f9" }}>
-                  {profile.companyName}
-                </p>
-                <p className="mt-0.5 truncate text-xs" style={{ color: "#475569" }}>
-                  {profile.contactName} - {profile.email} - {profile.serviceArea}
-                </p>
-              </div>
+              return (
+                <Link
+                  key={profile.id}
+                  href={`/admin/profiles/companies/${profile.id}`}
+                  className="flex items-center gap-4 border-b px-5 py-4 transition-colors last:border-b-0 hover:bg-white/[0.03]"
+                  style={{
+                    borderColor: "rgba(255,255,255,0.05)",
+                    background: "rgba(255,255,255,0.01)",
+                  }}
+                >
+                  <span
+                    className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wider"
+                    style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8" }}
+                  >
+                    Co
+                  </span>
 
-              <StatusBadge status={profile.activationStatus} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium" style={{ color: "#f1f5f9" }}>
+                      {profile.companyName}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs" style={{ color: "#475569" }}>
+                      {profile.contactName} - {profile.email} - {profile.serviceArea}
+                    </p>
+                    <p className="mt-1 truncate text-[11px]" style={{ color: "#64748b" }}>
+                      Docs {documentSummary.presentRequiredCount}/{documentSummary.requiredCount}{" "}
+                      required
+                      {" · "}
+                      {documentSummary.missingRequiredCount} missing
+                      {" · "}
+                      {documentSummary.expiringSoonCount} expiring soon
+                      {" · "}
+                      {documentSummary.expiredCount} expired
+                    </p>
+                  </div>
 
-              <p className="shrink-0 text-xs" style={{ color: "#475569" }}>
-                {fmt(profile.activatedAt)}
-              </p>
+                  <StatusBadge status={profile.activationStatus} />
 
-              <span style={{ color: "#334155" }}>&rsaquo;</span>
-            </Link>
-          ))}
+                  <p className="shrink-0 text-xs" style={{ color: "#475569" }}>
+                    {fmt(profile.activatedAt)}
+                  </p>
+
+                  <span style={{ color: "#334155" }}>&rsaquo;</span>
+                </Link>
+              );
+            })(),
+          )}
         </div>
       )}
 

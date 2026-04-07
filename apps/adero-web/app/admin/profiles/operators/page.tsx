@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { aderoOperatorProfiles, db } from "@raylak/db";
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import { aderoMemberDocuments, aderoOperatorProfiles, db } from "@raylak/db";
+import { getMemberDocumentSummary } from "~/lib/document-monitoring";
+import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
 import {
   PROFILE_STATUS_LABELS,
@@ -48,6 +49,26 @@ export default async function OperatorProfilesPage({
     )
     .orderBy(desc(aderoOperatorProfiles.activatedAt))
     .limit(100);
+  const documents = rows.length
+    ? await db
+        .select()
+        .from(aderoMemberDocuments)
+        .where(
+          inArray(
+            aderoMemberDocuments.operatorProfileId,
+            rows.map((profile) => profile.id),
+          ),
+        )
+        .orderBy(desc(aderoMemberDocuments.updatedAt))
+    : [];
+  const documentsByProfile = new Map<string, typeof documents>();
+
+  for (const document of documents) {
+    if (!document.operatorProfileId) continue;
+    const existing = documentsByProfile.get(document.operatorProfileId) ?? [];
+    existing.push(document);
+    documentsByProfile.set(document.operatorProfileId, existing);
+  }
 
   return (
     <div className="space-y-8">
@@ -139,6 +160,10 @@ export default async function OperatorProfilesPage({
             const vehicleLabel =
               VEHICLE_TYPE_LABELS[profile.vehicleType as VehicleType] ?? profile.vehicleType;
             const location = [profile.city, profile.state].filter(Boolean).join(", ");
+            const documentSummary = getMemberDocumentSummary(
+              "operator",
+              documentsByProfile.get(profile.id) ?? [],
+            );
 
             return (
               <Link
@@ -163,6 +188,16 @@ export default async function OperatorProfilesPage({
                   </p>
                   <p className="mt-0.5 truncate text-xs" style={{ color: "#475569" }}>
                     {location} - {vehicleLabel} - {profile.email}
+                  </p>
+                  <p className="mt-1 truncate text-[11px]" style={{ color: "#64748b" }}>
+                    Docs {documentSummary.presentRequiredCount}/{documentSummary.requiredCount}{" "}
+                    required
+                    {" · "}
+                    {documentSummary.missingRequiredCount} missing
+                    {" · "}
+                    {documentSummary.expiringSoonCount} expiring soon
+                    {" · "}
+                    {documentSummary.expiredCount} expired
                   </p>
                 </div>
 

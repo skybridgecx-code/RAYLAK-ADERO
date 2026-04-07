@@ -3,13 +3,16 @@
 import type { AderoMemberDocument } from "@raylak/db";
 import { useActionState } from "react";
 import {
+  getDocumentDisplayStatus,
+  getMemberDocumentSummary,
+  type AderoMemberType,
+} from "~/lib/document-monitoring";
+import {
   MEMBER_DOCUMENT_STATUSES,
   MEMBER_DOCUMENT_STATUS_LABELS,
   MEMBER_DOCUMENT_TYPES,
   MEMBER_DOCUMENT_TYPE_LABELS,
-  REQUIRED_MEMBER_DOCUMENT_TYPES,
   type MemberDocumentDisplayStatus,
-  type MemberDocumentType,
 } from "~/lib/validators";
 import { createMemberDocument, type DocumentActionState, updateMemberDocument } from "./actions";
 
@@ -49,6 +52,7 @@ function fmtDate(value: string | null) {
 
 const DOCUMENT_STATUS_COLORS: Record<MemberDocumentDisplayStatus, { bg: string; color: string }> = {
   missing: { bg: "rgba(148,163,184,0.15)", color: "#94a3b8" },
+  expiring_soon: { bg: "rgba(249,115,22,0.15)", color: "#fb923c" },
   pending_review: { bg: "rgba(234,179,8,0.15)", color: "#facc15" },
   approved: { bg: "rgba(34,197,94,0.2)", color: "#22c55e" },
   expired: { bg: "rgba(239,68,68,0.15)", color: "#f87171" },
@@ -68,20 +72,93 @@ function DocumentStatusBadge({ status }: { status: MemberDocumentDisplayStatus }
   );
 }
 
-function latestDocumentByType(documents: AderoMemberDocument[], documentType: MemberDocumentType) {
-  return documents.find((document) => document.documentType === documentType) ?? null;
-}
+function DocumentSummary({
+  memberType,
+  documents,
+}: {
+  memberType: AderoMemberType;
+  documents: AderoMemberDocument[];
+}) {
+  const summary = getMemberDocumentSummary(memberType, documents);
 
-function DocumentSummary({ documents }: { documents: AderoMemberDocument[] }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-      {REQUIRED_MEMBER_DOCUMENT_TYPES.map((documentType) => {
-        const document = latestDocumentByType(documents, documentType);
-        const status: MemberDocumentDisplayStatus = document?.status
-          ? (document.status as MemberDocumentDisplayStatus)
-          : "missing";
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div
+          className="rounded-xl border p-4"
+          style={{
+            borderColor: "rgba(255,255,255,0.07)",
+            background: "rgba(255,255,255,0.02)",
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-[3px]"
+            style={{ color: "#475569" }}
+          >
+            Required Present
+          </p>
+          <p className="mt-3 text-2xl font-light" style={{ color: "#f1f5f9" }}>
+            {summary.presentRequiredCount}/{summary.requiredCount}
+          </p>
+        </div>
 
-        return (
+        <div
+          className="rounded-xl border p-4"
+          style={{
+            borderColor: "rgba(255,255,255,0.07)",
+            background: "rgba(255,255,255,0.02)",
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-[3px]"
+            style={{ color: "#475569" }}
+          >
+            Missing Required
+          </p>
+          <p className="mt-3 text-2xl font-light" style={{ color: "#f1f5f9" }}>
+            {summary.missingRequiredCount}
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl border p-4"
+          style={{
+            borderColor: "rgba(255,255,255,0.07)",
+            background: "rgba(255,255,255,0.02)",
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-[3px]"
+            style={{ color: "#475569" }}
+          >
+            Expiring Soon
+          </p>
+          <p className="mt-3 text-2xl font-light" style={{ color: "#f1f5f9" }}>
+            {summary.expiringSoonCount}
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl border p-4"
+          style={{
+            borderColor: "rgba(255,255,255,0.07)",
+            background: "rgba(255,255,255,0.02)",
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-[3px]"
+            style={{ color: "#475569" }}
+          >
+            Expired
+          </p>
+          <p className="mt-3 text-2xl font-light" style={{ color: "#f1f5f9" }}>
+            {summary.expiredCount}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {summary.requiredDocuments.map(({ documentType, document, displayStatus }) => (
           <div
             key={documentType}
             className="rounded-xl border p-4"
@@ -97,7 +174,7 @@ function DocumentSummary({ documents }: { documents: AderoMemberDocument[] }) {
               {MEMBER_DOCUMENT_TYPE_LABELS[documentType]}
             </p>
             <div className="mt-3">
-              <DocumentStatusBadge status={status} />
+              <DocumentStatusBadge status={displayStatus} />
             </div>
             <p className="mt-3 text-xs" style={{ color: "#64748b" }}>
               {document ? document.title : "No tracked record"}
@@ -108,8 +185,8 @@ function DocumentSummary({ documents }: { documents: AderoMemberDocument[] }) {
                 : "No expiration"}
             </p>
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
@@ -119,7 +196,7 @@ function NewDocumentForm({
   profileId,
   accent,
 }: {
-  memberType: "company" | "operator";
+  memberType: AderoMemberType;
   profileId: string;
   accent: { bg: string; color: string; border: string };
 }) {
@@ -320,7 +397,7 @@ function ExistingDocumentForm({
   accent,
 }: {
   document: AderoMemberDocument;
-  memberType: "company" | "operator";
+  memberType: AderoMemberType;
   profileId: string;
   accent: { bg: string; color: string; border: string };
 }) {
@@ -328,6 +405,7 @@ function ExistingDocumentForm({
     updateMemberDocument,
     initialDocumentActionState,
   );
+  const displayStatus = getDocumentDisplayStatus(document);
 
   return (
     <form
@@ -351,7 +429,7 @@ function ExistingDocumentForm({
             Updated {fmtTimestamp(document.updatedAt)}
           </p>
         </div>
-        <DocumentStatusBadge status={document.status as MemberDocumentDisplayStatus} />
+        <DocumentStatusBadge status={displayStatus} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -531,7 +609,7 @@ export function DocumentTracking({
   profileId,
 }: {
   documents: AderoMemberDocument[];
-  memberType: "company" | "operator";
+  memberType: AderoMemberType;
   profileId: string;
 }) {
   const accent =
@@ -550,7 +628,7 @@ export function DocumentTracking({
         </p>
       </div>
 
-      <DocumentSummary documents={documents} />
+      <DocumentSummary memberType={memberType} documents={documents} />
 
       <NewDocumentForm memberType={memberType} profileId={profileId} accent={accent} />
 

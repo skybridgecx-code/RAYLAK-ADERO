@@ -20,6 +20,7 @@ const STATUS_COLORS: Record<
   paused: { bg: "rgba(234,179,8,0.15)", color: "#facc15" },
   inactive: { bg: "rgba(148,163,184,0.15)", color: "#94a3b8" },
   missing: { bg: "rgba(148,163,184,0.15)", color: "#94a3b8" },
+  expiring_soon: { bg: "rgba(249,115,22,0.15)", color: "#fb923c" },
   pending_review: { bg: "rgba(234,179,8,0.15)", color: "#facc15" },
   expired: { bg: "rgba(239,68,68,0.15)", color: "#f87171" },
 };

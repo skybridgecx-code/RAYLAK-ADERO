@@ -1,0 +1,249 @@
+"use client";
+
+import { useActionState, useState, useTransition } from "react";
+import type { AderoAuditLog } from "@raylak/db";
+import type { AderoMemberType } from "~/lib/document-monitoring";
+import { logPortalDeliveryEvent, rotatePortalToken, type PortalActionState } from "./portal-actions";
+
+const initialRotateState: PortalActionState = { error: null, saved: false };
+
+function fmtTimestamp(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  portal_link_copied: "Link copied",
+  portal_link_shared: "Marked as shared",
+  portal_token_rotated: "Token rotated",
+};
+
+export function PortalLinkPanel({
+  memberType,
+  profileId,
+  memberName,
+  portalToken,
+  recentEvents,
+}: {
+  memberType: AderoMemberType;
+  profileId: string;
+  memberName: string;
+  portalToken: string;
+  recentEvents: AderoAuditLog[];
+}) {
+  const [copied, setCopied] = useState(false);
+  const [shareLogged, setShareLogged] = useState(false);
+  const [isConfirmingRotate, setIsConfirmingRotate] = useState(false);
+  const [, startTransition] = useTransition();
+  const [rotateState, rotateAction, isRotating] = useActionState(
+    rotatePortalToken,
+    initialRotateState,
+  );
+
+  const portalPath = `/portal/${portalToken}`;
+
+  function buildDeliveryFormData(eventType: "link_copied" | "link_shared") {
+    const fd = new FormData();
+    fd.set("memberType", memberType);
+    fd.set("profileId", profileId);
+    fd.set("memberName", memberName);
+    fd.set("eventType", eventType);
+    return fd;
+  }
+
+  async function handleCopy() {
+    const url = `${window.location.origin}${portalPath}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: select the input text
+    }
+    // Fire-and-forget delivery log
+    startTransition(() => {
+      void logPortalDeliveryEvent(buildDeliveryFormData("link_copied"));
+    });
+  }
+
+  function handleMarkShared() {
+    setShareLogged(true);
+    setTimeout(() => setShareLogged(false), 3000);
+    startTransition(() => {
+      void logPortalDeliveryEvent(buildDeliveryFormData("link_shared"));
+    });
+  }
+
+  return (
+    <div
+      className="rounded-xl border p-5 space-y-5"
+      style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+    >
+      <p
+        className="text-xs font-semibold uppercase tracking-[3px]"
+        style={{ color: "#475569" }}
+      >
+        Member Portal Link
+      </p>
+
+      {/* Portal path display */}
+      <div className="space-y-2">
+        <p className="text-[11px]" style={{ color: "#475569" }}>
+          Share this link with{" "}
+          <span style={{ color: "#94a3b8" }}>{memberName}</span> so they can view their
+          document status.
+        </p>
+
+        <div
+          className="flex items-center gap-2 rounded-lg border px-3 py-2"
+          style={{ borderColor: "rgba(255,255,255,0.1)", background: "#0f172a" }}
+        >
+          <code className="min-w-0 flex-1 truncate text-xs" style={{ color: "#6366f1" }}>
+            {portalPath}
+          </code>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity"
+            style={{
+              background: copied ? "rgba(34,197,94,0.15)" : "rgba(99,102,241,0.15)",
+              color: copied ? "#4ade80" : "#818cf8",
+            }}
+          >
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleMarkShared}
+            disabled={shareLogged}
+            className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-60"
+            style={{
+              background: shareLogged ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.06)",
+              color: shareLogged ? "#4ade80" : "#64748b",
+            }}
+          >
+            {shareLogged ? "Logged as shared" : "Mark as shared"}
+          </button>
+        </div>
+      </div>
+
+      {/* Rotate token */}
+      <div
+        className="border-t space-y-3 pt-4"
+        style={{ borderColor: "rgba(255,255,255,0.06)" }}
+      >
+        <p
+          className="text-[11px] font-semibold uppercase tracking-[2px]"
+          style={{ color: "#334155" }}
+        >
+          Token Rotation
+        </p>
+
+        {rotateState.saved ? (
+          <p className="text-xs" style={{ color: "#4ade80" }}>
+            Token rotated. The previous link is now invalid. Copy the new link above.
+          </p>
+        ) : isConfirmingRotate ? (
+          <div className="space-y-3">
+            <p className="text-xs" style={{ color: "#f87171" }}>
+              This will invalidate the current portal link immediately.{" "}
+              <span style={{ color: "#94a3b8" }}>{memberName}</span> will need the new URL
+              to access their status page.
+            </p>
+
+            <form action={rotateAction} className="space-y-2">
+              <input type="hidden" name="memberType" value={memberType} />
+              <input type="hidden" name="profileId" value={profileId} />
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  disabled={isRotating}
+                  className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-50"
+                  style={{ background: "rgba(239,68,68,0.15)", color: "#f87171" }}
+                >
+                  {isRotating ? "Rotating…" : "Yes, rotate token"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingRotate(false)}
+                  className="rounded-md px-3 py-1.5 text-xs transition-opacity"
+                  style={{ color: "#475569" }}
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {rotateState.error && (
+                <p className="text-xs" style={{ color: "#f87171" }}>
+                  {rotateState.error}
+                </p>
+              )}
+            </form>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-[11px]" style={{ color: "#475569" }}>
+              If the current link has been compromised, rotate the token to invalidate it.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsConfirmingRotate(true)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                color: "#64748b",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              Rotate portal token
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Delivery history */}
+      {recentEvents.length > 0 && (
+        <div
+          className="border-t space-y-3 pt-4"
+          style={{ borderColor: "rgba(255,255,255,0.06)" }}
+        >
+          <p
+            className="text-[11px] font-semibold uppercase tracking-[2px]"
+            style={{ color: "#334155" }}
+          >
+            Delivery History
+          </p>
+          <div className="space-y-2">
+            {recentEvents.map((event) => (
+              <div key={event.id} className="flex items-start gap-3">
+                <span
+                  className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                  style={{ background: "rgba(99,102,241,0.1)", color: "#818cf8" }}
+                >
+                  {EVENT_LABELS[event.action] ?? event.action.replace(/_/g, " ")}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px]" style={{ color: "#475569" }}>
+                    {fmtTimestamp(event.createdAt)}
+                    {event.actorName ? ` · ${event.actorName}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

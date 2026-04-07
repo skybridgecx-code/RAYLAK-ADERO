@@ -9,13 +9,14 @@ import {
   aderoMemberDocuments,
   db,
 } from "@raylak/db";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
 import { getMemberDocumentSummary } from "~/lib/document-monitoring";
 import { PROFILE_STATUS_LABELS, type ProfileStatus } from "~/lib/validators";
 import { AuditHistory } from "../../../audit-history";
 import { DocumentTracking } from "../../document-tracking";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
+import { PortalLinkPanel } from "../../portal-link-panel";
 
 export const metadata: Metadata = {
   title: "Company Profile - Adero Admin",
@@ -26,35 +27,49 @@ export const dynamic = "force-dynamic";
 
 export default async function CompanyProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [[row], auditEntries, documents, complianceNotifications] = await Promise.all([
-    db
-      .select({
-        profile: aderoCompanyProfiles,
-        application: aderoCompanyApplications,
-      })
-      .from(aderoCompanyProfiles)
-      .leftJoin(
-        aderoCompanyApplications,
-        eq(aderoCompanyProfiles.applicationId, aderoCompanyApplications.id),
-      )
-      .where(eq(aderoCompanyProfiles.id, id)),
-    db
-      .select()
-      .from(aderoAuditLogs)
-      .where(eq(aderoAuditLogs.companyProfileId, id))
-      .orderBy(desc(aderoAuditLogs.createdAt))
-      .limit(25),
-    db
-      .select()
-      .from(aderoMemberDocuments)
-      .where(eq(aderoMemberDocuments.companyProfileId, id))
-      .orderBy(desc(aderoMemberDocuments.updatedAt)),
-    db
-      .select()
-      .from(aderoDocumentComplianceNotifications)
-      .where(eq(aderoDocumentComplianceNotifications.companyProfileId, id))
-      .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
-  ]);
+  const PORTAL_ACTIONS = ["portal_link_copied", "portal_link_shared", "portal_token_rotated"];
+
+  const [[row], auditEntries, documents, complianceNotifications, portalEvents] =
+    await Promise.all([
+      db
+        .select({
+          profile: aderoCompanyProfiles,
+          application: aderoCompanyApplications,
+        })
+        .from(aderoCompanyProfiles)
+        .leftJoin(
+          aderoCompanyApplications,
+          eq(aderoCompanyProfiles.applicationId, aderoCompanyApplications.id),
+        )
+        .where(eq(aderoCompanyProfiles.id, id)),
+      db
+        .select()
+        .from(aderoAuditLogs)
+        .where(eq(aderoAuditLogs.companyProfileId, id))
+        .orderBy(desc(aderoAuditLogs.createdAt))
+        .limit(25),
+      db
+        .select()
+        .from(aderoMemberDocuments)
+        .where(eq(aderoMemberDocuments.companyProfileId, id))
+        .orderBy(desc(aderoMemberDocuments.updatedAt)),
+      db
+        .select()
+        .from(aderoDocumentComplianceNotifications)
+        .where(eq(aderoDocumentComplianceNotifications.companyProfileId, id))
+        .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
+      db
+        .select()
+        .from(aderoAuditLogs)
+        .where(
+          and(
+            eq(aderoAuditLogs.companyProfileId, id),
+            inArray(aderoAuditLogs.action, PORTAL_ACTIONS),
+          ),
+        )
+        .orderBy(desc(aderoAuditLogs.createdAt))
+        .limit(10),
+    ]);
 
   if (!row) notFound();
 
@@ -230,25 +245,15 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
             </p>
           </div>
 
-          <div className="mt-5 border-t pt-5 space-y-2" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-            <p className="text-[11px] font-semibold uppercase tracking-[2px]" style={{ color: "#334155" }}>
-              Member Portal
-            </p>
-            <p className="text-[11px]" style={{ color: "#475569" }}>
-              Share this link with the member for their document status page.
-            </p>
-            <code
-              className="block break-all rounded-md border px-2.5 py-2 text-[11px] leading-relaxed"
-              style={{
-                borderColor: "rgba(255,255,255,0.08)",
-                background: "#0f172a",
-                color: "#6366f1",
-              }}
-            >
-              /portal/{profile.portalToken}
-            </code>
-          </div>
         </div>
+
+        <PortalLinkPanel
+          memberType="company"
+          profileId={profile.id}
+          memberName={profile.companyName}
+          portalToken={profile.portalToken}
+          recentEvents={portalEvents}
+        />
       </div>
     </ProfileShell>
   );

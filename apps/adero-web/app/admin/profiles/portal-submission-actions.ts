@@ -7,7 +7,7 @@ import {
   aderoPortalSubmissions,
   db,
 } from "@raylak/db";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -51,7 +51,6 @@ export async function reviewPortalSubmission(formData: FormData): Promise<void> 
           id: aderoPortalSubmissions.id,
           status: aderoPortalSubmissions.status,
           documentType: aderoPortalSubmissions.documentType,
-          createdAt: aderoPortalSubmissions.createdAt,
         })
         .from(aderoPortalSubmissions)
         .where(
@@ -66,24 +65,13 @@ export async function reviewPortalSubmission(formData: FormData): Promise<void> 
 
       if (!submission || submission.status !== "pending") return;
 
-      const memberScopeFilter =
-        memberType === "company"
-          ? eq(aderoPortalSubmissions.companyProfileId, profileId)
-          : eq(aderoPortalSubmissions.operatorProfileId, profileId);
-
       const [newerSubmission] = await tx
         .select({ id: aderoPortalSubmissions.id })
         .from(aderoPortalSubmissions)
-        .where(
-          and(
-            memberScopeFilter,
-            eq(aderoPortalSubmissions.documentType, submission.documentType),
-            gt(aderoPortalSubmissions.createdAt, submission.createdAt),
-          ),
-        )
+        .where(eq(aderoPortalSubmissions.supersedesSubmissionId, submission.id))
         .limit(1);
 
-      // Do not review stale pending entries that were followed by a newer member response.
+      // Do not review stale pending entries that were explicitly superseded.
       if (newerSubmission) return;
 
       await tx

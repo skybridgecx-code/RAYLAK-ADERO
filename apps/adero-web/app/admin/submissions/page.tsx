@@ -8,6 +8,7 @@ import {
   db,
 } from "@raylak/db";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { createPresignedGet } from "~/lib/s3";
 import {
   MEMBER_DOCUMENT_TYPE_LABELS,
@@ -51,6 +52,7 @@ const STATUS_STYLES = {
 } as const;
 
 type KnownStatus = keyof typeof STATUS_STYLES;
+const supersedingSubmissions = alias(aderoPortalSubmissions, "superseding_submissions");
 const STATUS_FILTER_VALUES = [...ADERO_PORTAL_SUBMISSION_STATUSES, "all"] as const;
 type StatusFilter = (typeof STATUS_FILTER_VALUES)[number];
 
@@ -132,6 +134,9 @@ export default async function SubmissionsInboxPage({
       submission: aderoPortalSubmissions,
       companyName: aderoCompanyProfiles.companyName,
       operatorName: aderoOperatorProfiles.fullName,
+      supersedingSubmissionId: supersedingSubmissions.id,
+      supersedingSubmissionStatus: supersedingSubmissions.status,
+      supersedingSubmissionCreatedAt: supersedingSubmissions.createdAt,
     })
     .from(aderoPortalSubmissions)
     .leftJoin(
@@ -142,31 +147,13 @@ export default async function SubmissionsInboxPage({
       aderoOperatorProfiles,
       eq(aderoPortalSubmissions.operatorProfileId, aderoOperatorProfiles.id),
     )
+    .leftJoin(
+      supersedingSubmissions,
+      eq(supersedingSubmissions.supersedesSubmissionId, aderoPortalSubmissions.id),
+    )
     .where(listConditions.length > 0 ? and(...listConditions) : undefined)
     .orderBy(desc(aderoPortalSubmissions.createdAt))
     .limit(200);
-
-  type NewerSubmissionContext = { id: string; status: string; createdAt: Date };
-  const newerSubmissionById = new Map<string, NewerSubmissionContext>();
-  const latestSubmissionByMemberDoc = new Map<string, NewerSubmissionContext>();
-
-  for (const { submission } of rows) {
-    const chainProfileId =
-      submission.memberType === "company" ? submission.companyProfileId : submission.operatorProfileId;
-    if (!chainProfileId) continue;
-
-    const chainKey = `${submission.memberType}:${chainProfileId}:${submission.documentType}`;
-    const latestInChain = latestSubmissionByMemberDoc.get(chainKey);
-    if (latestInChain) {
-      newerSubmissionById.set(submission.id, latestInChain);
-    }
-
-    latestSubmissionByMemberDoc.set(chainKey, {
-      id: submission.id,
-      status: submission.status,
-      createdAt: submission.createdAt,
-    });
-  }
 
   // ── Generate presigned download URLs ──────────────────────────────────────
   const downloadUrls = new Map<string, string>();
@@ -346,7 +333,15 @@ export default async function SubmissionsInboxPage({
           className="overflow-hidden rounded-xl border"
           style={{ borderColor: "rgba(255,255,255,0.07)" }}
         >
-          {rows.map(({ submission: sub, companyName, operatorName }) => {
+          {rows.map(
+            ({
+              submission: sub,
+              companyName,
+              operatorName,
+              supersedingSubmissionId,
+              supersedingSubmissionStatus,
+              supersedingSubmissionCreatedAt,
+            }) => {
             const memberType = sub.memberType as "company" | "operator";
             const memberName = memberType === "company" ? (companyName ?? "Unknown company") : (operatorName ?? "Unknown operator");
             const profileId = memberType === "company" ? sub.companyProfileId : sub.operatorProfileId;
@@ -360,7 +355,14 @@ export default async function SubmissionsInboxPage({
               sub.documentType;
             const ss = statusStyle(sub.status);
             const downloadUrl = downloadUrls.get(sub.id);
-            const newerSubmission = newerSubmissionById.get(sub.id);
+            const newerSubmission =
+              supersedingSubmissionId && supersedingSubmissionStatus && supersedingSubmissionCreatedAt
+                ? {
+                    id: supersedingSubmissionId,
+                    status: supersedingSubmissionStatus,
+                    createdAt: supersedingSubmissionCreatedAt,
+                  }
+                : null;
 
             return (
               <div
@@ -465,12 +467,18 @@ export default async function SubmissionsInboxPage({
                   </p>
                 )}
 
+                {sub.supersedesSubmissionId && (
+                  <p className="mt-2 text-[11px] font-mono" style={{ color: "#64748b" }}>
+                    Supersedes submission {sub.supersedesSubmissionId}.
+                  </p>
+                )}
+
                 {newerSubmission && (
-                  <p className="mt-2 text-[11px]" style={{ color: "#64748b" }}>
+                  <p className="mt-2 text-[11px] font-mono" style={{ color: "#64748b" }}>
                     {isFollowUpOutcomeStatus(sub.status)
                       ? "Followed by newer member response"
                       : "Superseded by newer submission"}{" "}
-                    on {fmtTimestamp(newerSubmission.createdAt)} (
+                    {newerSubmission.id} on {fmtTimestamp(newerSubmission.createdAt)} (
                     {statusStyle(newerSubmission.status).label.toLowerCase()}).
                   </p>
                 )}
@@ -534,13 +542,14 @@ export default async function SubmissionsInboxPage({
 
                   {sub.status === "pending" && newerSubmission && (
                     <p className="text-[11px]" style={{ color: "#64748b" }}>
-                      This pending item is superseded by a newer member response.
+                      This pending item is superseded by submission {newerSubmission.id}.
                     </p>
                   )}
                 </div>
               </div>
             );
-          })}
+            },
+          )}
         </div>
       )}
 

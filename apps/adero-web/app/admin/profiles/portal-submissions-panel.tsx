@@ -1,5 +1,6 @@
 import type { AderoPortalSubmission } from "@raylak/db";
 import type { AderoMemberType } from "~/lib/document-monitoring";
+import { getSupersededByMap } from "~/lib/portal-submission-threading";
 import { createPresignedGet } from "~/lib/s3";
 import { MEMBER_DOCUMENT_TYPE_LABELS, type MemberDocumentType } from "~/lib/validators";
 import { reviewPortalSubmission } from "./portal-submission-actions";
@@ -73,20 +74,7 @@ export async function PortalSubmissionsPanel({
       }),
   );
 
-  type NewerSubmissionContext = { status: string; createdAt: Date };
-  const newerSubmissionById = new Map<string, NewerSubmissionContext>();
-  const latestSubmissionByDocument = new Map<string, NewerSubmissionContext>();
-
-  for (const submission of submissions) {
-    const latestForDocument = latestSubmissionByDocument.get(submission.documentType);
-    if (latestForDocument) {
-      newerSubmissionById.set(submission.id, latestForDocument);
-    }
-    latestSubmissionByDocument.set(submission.documentType, {
-      status: submission.status,
-      createdAt: submission.createdAt,
-    });
-  }
+  const supersededByMap = getSupersededByMap(submissions);
 
   return (
     <div
@@ -107,7 +95,7 @@ export async function PortalSubmissionsPanel({
             MEMBER_DOCUMENT_TYPE_LABELS[sub.documentType as MemberDocumentType] ??
             sub.documentType;
           const downloadUrl = downloadUrls.get(sub.id);
-          const newerSubmission = newerSubmissionById.get(sub.id);
+          const newerSubmission = supersededByMap.get(sub.id) ?? null;
 
           return (
             <div
@@ -175,12 +163,18 @@ export async function PortalSubmissionsPanel({
                 </p>
               )}
 
+              {sub.supersedesSubmissionId && (
+                <p className="text-[11px] font-mono" style={{ color: "#64748b" }}>
+                  Supersedes submission {sub.supersedesSubmissionId}.
+                </p>
+              )}
+
               {newerSubmission && (
-                <p className="text-[11px]" style={{ color: "#64748b" }}>
+                <p className="text-[11px] font-mono" style={{ color: "#64748b" }}>
                   {isFollowUpOutcomeStatus(sub.status)
                     ? "Followed by newer member response"
                     : "Superseded by newer submission"}{" "}
-                  on {fmtTimestamp(newerSubmission.createdAt)} (
+                  {newerSubmission.id} on {fmtTimestamp(newerSubmission.createdAt)} (
                   {((newerSubmission.status in STATUS_STYLES
                     ? STATUS_STYLES[newerSubmission.status as keyof typeof STATUS_STYLES]
                     : FALLBACK_STATUS
@@ -235,7 +229,7 @@ export async function PortalSubmissionsPanel({
 
               {sub.status === "pending" && newerSubmission && (
                 <p className="text-[11px]" style={{ color: "#64748b" }}>
-                  This pending item is superseded by a newer member response.
+                  This pending item is superseded by submission {newerSubmission.id}.
                 </p>
               )}
             </div>

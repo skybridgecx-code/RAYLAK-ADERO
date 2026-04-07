@@ -16,7 +16,6 @@ import {
   type AderoMemberType,
 } from "~/lib/document-monitoring";
 import {
-  MEMBER_DOCUMENT_TYPES,
   MEMBER_DOCUMENT_TYPE_LABELS,
   PROFILE_STATUS_LABELS,
   type MemberDocumentComplianceAction,
@@ -25,6 +24,14 @@ import {
   type ProfileStatus,
 } from "~/lib/validators";
 import { getCurrentComplianceAction } from "~/lib/document-compliance";
+import {
+  getCurrentSubmissionByDocumentType,
+  isAcceptedSubmissionStatus,
+  isFollowUpSubmissionStatus,
+  isRejectedSubmissionStatus,
+  needsMemberResubmission,
+  toKnownDocumentType,
+} from "~/lib/portal-submission-threading";
 import { PortalSubmitForm } from "./submit-form";
 
 export const metadata: Metadata = {
@@ -74,27 +81,6 @@ const SUBMISSION_STATUS: Record<string, { label: string; color: string }> = {
   reviewed: { label: "Accepted by staff", color: "#4ade80" },
   dismissed: { label: "Update rejected - submit a corrected document", color: "#f87171" },
 };
-
-function isAcceptedSubmissionStatus(status: string) {
-  return status === "accepted" || status === "reviewed";
-}
-
-function isRejectedSubmissionStatus(status: string) {
-  return status === "rejected" || status === "dismissed";
-}
-
-function isFollowUpSubmissionStatus(status: string) {
-  return status === "needs_follow_up";
-}
-
-function needsMemberResubmission(status: string) {
-  return isRejectedSubmissionStatus(status) || isFollowUpSubmissionStatus(status);
-}
-
-function toKnownDocumentType(value: string): MemberDocumentType | null {
-  if (!MEMBER_DOCUMENT_TYPES.includes(value as MemberDocumentType)) return null;
-  return value as MemberDocumentType;
-}
 
 const REVIEW_OUTCOME_STYLES = {
   accepted: { bg: "rgba(34,197,94,0.06)", borderColor: "rgba(34,197,94,0.22)", color: "#4ade80" },
@@ -209,13 +195,7 @@ export default async function MemberPortalPage({
   const profileStatusLabel =
     PROFILE_STATUS_LABELS[activationStatus as ProfileStatus] ?? activationStatus;
 
-  // Build latest submission map per documentType (ordered DESC, first = latest)
-  const latestSubmission = new Map<string, (typeof submissions)[0]>();
-  for (const sub of submissions) {
-    if (!latestSubmission.has(sub.documentType)) {
-      latestSubmission.set(sub.documentType, sub);
-    }
-  }
+  const currentSubmissionByDocumentType = getCurrentSubmissionByDocumentType(submissions);
 
   // Required document status per type
   const requiredDocStatus = summary.requiredDocuments.map(({ documentType, document }) => {
@@ -251,7 +231,7 @@ export default async function MemberPortalPage({
     )
     .map((entry) => entry.documentType as MemberDocumentType);
 
-  const latestReviewedOutcomes = Array.from(latestSubmission.values()).filter(
+  const latestReviewedOutcomes = Array.from(currentSubmissionByDocumentType.values()).filter(
     (sub) => sub.status !== "pending",
   );
   const resubmissionTypes = latestReviewedOutcomes
@@ -466,7 +446,7 @@ export default async function MemberPortalPage({
             const docTypeLabel =
               MEMBER_DOCUMENT_TYPE_LABELS[entry.documentType as MemberDocumentType] ??
               entry.documentType;
-            const latestSub = latestSubmission.get(entry.documentType);
+            const latestSub = currentSubmissionByDocumentType.get(entry.documentType);
             const subStatus = latestSub ? (SUBMISSION_STATUS[latestSub.status] ?? null) : null;
 
             return (

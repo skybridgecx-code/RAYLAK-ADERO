@@ -16,6 +16,11 @@ import type { AderoMemberType } from "~/lib/document-monitoring";
 import { getMemberDocumentSummary } from "~/lib/document-monitoring";
 import { getCurrentComplianceAction } from "~/lib/document-compliance";
 import {
+  getCurrentSubmissionByDocumentType,
+  needsMemberResubmission,
+  toKnownDocumentType,
+} from "~/lib/portal-submission-threading";
+import {
   MEMBER_DOCUMENT_TYPES,
   type MemberDocumentComplianceAction,
   type MemberDocumentType,
@@ -43,23 +48,6 @@ const SubmitInput = z.object({
 });
 
 const FOLLOW_UP_ACTIONS: MemberDocumentComplianceAction[] = ["follow_up_needed", "reminder_sent"];
-
-function toKnownDocumentType(value: string): MemberDocumentType | null {
-  if (!MEMBER_DOCUMENT_TYPES.includes(value as MemberDocumentType)) return null;
-  return value as MemberDocumentType;
-}
-
-function isRejectedSubmissionStatus(status: string) {
-  return status === "rejected" || status === "dismissed";
-}
-
-function isFollowUpSubmissionStatus(status: string) {
-  return status === "needs_follow_up";
-}
-
-function needsMemberResubmission(status: string) {
-  return isRejectedSubmissionStatus(status) || isFollowUpSubmissionStatus(status);
-}
 
 export async function submitPortalDocument(
   _prev: PortalSubmitState,
@@ -149,6 +137,8 @@ export async function submitPortalDocument(
           id: aderoPortalSubmissions.id,
           documentType: aderoPortalSubmissions.documentType,
           status: aderoPortalSubmissions.status,
+          createdAt: aderoPortalSubmissions.createdAt,
+          supersedesSubmissionId: aderoPortalSubmissions.supersedesSubmissionId,
         })
         .from(aderoPortalSubmissions)
         .where(submissionMemberFilter)
@@ -178,19 +168,11 @@ export async function submitPortalDocument(
       })
       .map((entry) => entry.documentType);
 
-    const latestSubmissionByType = new Map<
-      MemberDocumentType,
-      (typeof existingSubmissions)[number]
-    >();
-    for (const submission of existingSubmissions) {
-      const knownType = toKnownDocumentType(submission.documentType);
-      if (!knownType || latestSubmissionByType.has(knownType)) continue;
-      latestSubmissionByType.set(knownType, submission);
-    }
-
-    const resubmissionTypes = Array.from(latestSubmissionByType.entries())
+    const currentSubmissionByDocumentType = getCurrentSubmissionByDocumentType(existingSubmissions);
+    const resubmissionTypes = Array.from(currentSubmissionByDocumentType.entries())
       .filter(([, submission]) => needsMemberResubmission(submission.status))
-      .map(([documentTypeKey]) => documentTypeKey);
+      .map(([documentTypeKey]) => toKnownDocumentType(documentTypeKey))
+      .filter((value): value is MemberDocumentType => value !== null);
 
     const allowedDocumentTypes = new Set<MemberDocumentType>([
       ...attentionTypes,
@@ -208,10 +190,13 @@ export async function submitPortalDocument(
     let submissionError: string | null = null;
 
     await db.transaction(async (tx) => {
-      const [latestSubmissionForDocument] = await tx
+      const existingForDocument = await tx
         .select({
           id: aderoPortalSubmissions.id,
+          documentType: aderoPortalSubmissions.documentType,
           status: aderoPortalSubmissions.status,
+          createdAt: aderoPortalSubmissions.createdAt,
+          supersedesSubmissionId: aderoPortalSubmissions.supersedesSubmissionId,
         })
         .from(aderoPortalSubmissions)
         .where(
@@ -219,18 +204,19 @@ export async function submitPortalDocument(
             submissionMemberFilter,
             eq(aderoPortalSubmissions.documentType, documentType),
           ),
-        )
-        .orderBy(desc(aderoPortalSubmissions.createdAt))
-        .limit(1);
+        );
 
-      if (latestSubmissionForDocument?.status === "pending") {
+      const currentSubmissionForDocument =
+        getCurrentSubmissionByDocumentType(existingForDocument).get(documentType) ?? null;
+
+      if (currentSubmissionForDocument?.status === "pending") {
         submissionError =
           "A previous submission for this document is still under review. Please wait for staff review before submitting another update.";
         return;
       }
 
-      const isResubmission = latestSubmissionForDocument
-        ? needsMemberResubmission(latestSubmissionForDocument.status)
+      const isResubmission = currentSubmissionForDocument
+        ? needsMemberResubmission(currentSubmissionForDocument.status)
         : false;
 
       await tx.insert(aderoPortalSubmissions).values({
@@ -243,6 +229,7 @@ export async function submitPortalDocument(
         fileName: fileName ?? null,
         fileSizeBytes: fileSizeBytes ?? null,
         status: "pending",
+        supersedesSubmissionId: currentSubmissionForDocument?.id ?? null,
         createdAt: now,
         updatedAt: now,
       });
@@ -255,11 +242,11 @@ export async function submitPortalDocument(
         action: isResubmission ? "portal_document_resubmitted" : "portal_document_submitted",
         actorName: null,
         summary: isResubmission
-          ? `Member submitted follow-up for ${documentType} after ${latestSubmissionForDocument?.status ?? "staff review"} via portal.${fileKey ? " File attached." : ""}`
+          ? `Member submitted follow-up for ${documentType} after ${currentSubmissionForDocument?.status ?? "staff review"} via portal.${fileKey ? " File attached." : ""}`
           : `Member submitted document update for ${documentType} via portal.${fileKey ? " File attached." : ""}`,
         details:
-          isResubmission && latestSubmissionForDocument
-            ? `Previous submission ${latestSubmissionForDocument.id} was ${latestSubmissionForDocument.status}.`
+          currentSubmissionForDocument
+            ? `Supersedes submission ${currentSubmissionForDocument.id} (${currentSubmissionForDocument.status}).`
             : null,
         createdAt: now,
       });
@@ -269,6 +256,18 @@ export async function submitPortalDocument(
       return { error: submissionError, submitted: false };
     }
   } catch (err) {
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code?: string }).code === "23505"
+    ) {
+      return {
+        error:
+          "A newer submission already exists for this document. Please refresh to see the latest status.",
+        submitted: false,
+      };
+    }
     console.error("[adero] submitPortalDocument failed:", err);
     return { error: "Submission failed. Please try again.", submitted: false };
   }

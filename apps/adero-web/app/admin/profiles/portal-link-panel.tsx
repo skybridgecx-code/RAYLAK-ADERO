@@ -7,6 +7,7 @@ import {
   expirePortalToken,
   logPortalDeliveryEvent,
   rotatePortalToken,
+  sendPortalLinkByEmail,
   type PortalActionState,
 } from "./portal-actions";
 
@@ -25,6 +26,7 @@ function fmtTimestamp(date: Date) {
 const EVENT_LABELS: Record<string, string> = {
   portal_link_copied: "Link copied",
   portal_link_shared: "Marked as shared",
+  portal_link_emailed: "Emailed to member",
   portal_token_rotated: "Token rotated",
   portal_token_expired: "Token expired",
 };
@@ -55,6 +57,7 @@ export function PortalLinkPanel({
   memberType,
   profileId,
   memberName,
+  memberEmail,
   portalToken,
   portalTokenExpiresAt,
   recentEvents,
@@ -62,6 +65,7 @@ export function PortalLinkPanel({
   memberType: AderoMemberType;
   profileId: string;
   memberName: string;
+  memberEmail: string;
   portalToken: string;
   portalTokenExpiresAt: Date | null;
   recentEvents: AderoAuditLog[];
@@ -77,6 +81,10 @@ export function PortalLinkPanel({
   );
   const [expireState, expireAction, isExpiring] = useActionState(
     expirePortalToken,
+    initialState,
+  );
+  const [emailState, emailAction, isSendingEmail] = useActionState(
+    sendPortalLinkByEmail,
     initialState,
   );
 
@@ -187,6 +195,49 @@ export function PortalLinkPanel({
             {shareLogged ? "Logged as shared" : "Mark as shared"}
           </button>
         </div>
+      </div>
+
+      {/* Send by email */}
+      <div className="border-t space-y-3 pt-4" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <p className="text-[11px] font-semibold uppercase tracking-[2px]" style={{ color: "#334155" }}>
+          Email to Member
+        </p>
+
+        {emailState.saved ? (
+          <p className="text-xs" style={{ color: "#4ade80" }}>
+            Portal link emailed to{" "}
+            <span style={{ color: "#94a3b8" }}>{memberEmail}</span>.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-[11px]" style={{ color: "#475569" }}>
+              Send the current portal link directly to{" "}
+              <span style={{ color: "#94a3b8" }}>{memberEmail}</span>.
+            </p>
+
+            <form action={emailAction}>
+              <input type="hidden" name="memberType" value={memberType} />
+              <input type="hidden" name="profileId" value={profileId} />
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={isSendingEmail || isExpired}
+                  className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-50"
+                  style={{ background: "rgba(99,102,241,0.15)", color: "#818cf8" }}
+                >
+                  {isSendingEmail ? "Sending…" : "Send link by email"}
+                </button>
+              </div>
+
+              {emailState.error && (
+                <p className="mt-2 text-xs" style={{ color: "#f87171" }}>
+                  {emailState.error}
+                </p>
+              )}
+            </form>
+          </div>
+        )}
       </div>
 
       {/* Expire now */}

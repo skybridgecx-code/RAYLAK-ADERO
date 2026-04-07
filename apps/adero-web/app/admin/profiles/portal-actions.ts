@@ -10,6 +10,7 @@ import {
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { sendPortalLinkEmail } from "~/lib/email";
 
 export type PortalActionState = {
   error: string | null;
@@ -198,6 +199,112 @@ export async function expirePortalToken(
   } catch (err) {
     console.error("[adero] expirePortalToken failed:", err);
     return { error: "Token expiry failed. Please try again.", saved: false };
+  }
+
+  return { error: null, saved: true };
+}
+
+// ─── Send portal link by email ────────────────────────────────────────────────
+
+const SendEmailInput = z.object({
+  memberType: z.enum(["company", "operator"]),
+  profileId: z.string().uuid(),
+  actorName: z.string().trim().optional(),
+});
+
+export async function sendPortalLinkByEmail(
+  _prev: PortalActionState,
+  formData: FormData,
+): Promise<PortalActionState> {
+  const result = SendEmailInput.safeParse({
+    memberType: formData.get("memberType"),
+    profileId: formData.get("profileId"),
+    actorName: formData.get("actorName") ?? undefined,
+  });
+
+  if (!result.success) {
+    return { error: "Invalid request.", saved: false };
+  }
+
+  const { memberType, profileId, actorName } = result.data;
+  const actor = actorName?.trim() || "Adero admin";
+  const now = new Date();
+
+  try {
+    if (memberType === "company") {
+      const [profile] = await db
+        .select()
+        .from(aderoCompanyProfiles)
+        .where(eq(aderoCompanyProfiles.id, profileId))
+        .limit(1);
+
+      if (!profile) return { error: "Profile not found.", saved: false };
+
+      if (profile.portalTokenExpiresAt && profile.portalTokenExpiresAt <= new Date()) {
+        return {
+          error: "Portal token is expired. Rotate the token before sending a new link.",
+          saved: false,
+        };
+      }
+
+      await sendPortalLinkEmail({
+        to: profile.email,
+        memberName: profile.companyName,
+        portalToken: profile.portalToken,
+      });
+
+      await db.insert(aderoAuditLogs).values({
+        entityType: "company_portal",
+        entityId: profile.id,
+        applicationId: profile.applicationId,
+        companyApplicationId: profile.applicationId,
+        companyProfileId: profile.id,
+        action: "portal_link_emailed",
+        actorName: actor,
+        summary: `Portal link emailed to ${profile.email} for ${profile.companyName}.`,
+        createdAt: now,
+      });
+
+      revalidatePath(`/admin/profiles/companies/${profileId}`);
+    } else {
+      const [profile] = await db
+        .select()
+        .from(aderoOperatorProfiles)
+        .where(eq(aderoOperatorProfiles.id, profileId))
+        .limit(1);
+
+      if (!profile) return { error: "Profile not found.", saved: false };
+
+      if (profile.portalTokenExpiresAt && profile.portalTokenExpiresAt <= new Date()) {
+        return {
+          error: "Portal token is expired. Rotate the token before sending a new link.",
+          saved: false,
+        };
+      }
+
+      await sendPortalLinkEmail({
+        to: profile.email,
+        memberName: profile.fullName,
+        portalToken: profile.portalToken,
+      });
+
+      await db.insert(aderoAuditLogs).values({
+        entityType: "operator_portal",
+        entityId: profile.id,
+        applicationId: profile.applicationId,
+        operatorApplicationId: profile.applicationId,
+        operatorProfileId: profile.id,
+        action: "portal_link_emailed",
+        actorName: actor,
+        summary: `Portal link emailed to ${profile.email} for ${profile.fullName}.`,
+        createdAt: now,
+      });
+
+      revalidatePath(`/admin/profiles/operators/${profileId}`);
+    }
+  } catch (err) {
+    console.error("[adero] sendPortalLinkByEmail failed:", err);
+    return { error: "Email delivery failed. Please try again.", saved: false };
   }
 
   return { error: null, saved: true };

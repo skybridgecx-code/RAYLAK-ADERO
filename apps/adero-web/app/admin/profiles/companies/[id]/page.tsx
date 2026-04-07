@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CompanyProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const PORTAL_ACTIONS = ["portal_link_copied", "portal_link_shared", "portal_token_rotated", "portal_token_expired"];
+  const PORTAL_ACTIONS = ["portal_link_copied", "portal_link_shared", "portal_link_emailed", "portal_token_rotated", "portal_token_expired"];
 
   const [[row], auditEntries, documents, complianceNotifications, portalEvents, portalSubmissions] =
     await Promise.all([
@@ -258,6 +258,7 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
           memberType="company"
           profileId={profile.id}
           memberName={profile.companyName}
+          memberEmail={profile.email}
           portalToken={profile.portalToken}
           portalTokenExpiresAt={profile.portalTokenExpiresAt}
           recentEvents={portalEvents}

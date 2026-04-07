@@ -58,4 +58,5 @@ export async function reviewPortalSubmission(formData: FormData): Promise<void> 
       ? `/admin/profiles/companies/${profileId}`
       : `/admin/profiles/operators/${profileId}`,
   );
+  revalidatePath("/admin/submissions");
 }

@@ -9,4 +9,5 @@ export * from "./adero-applications";
 export * from "./adero-profiles";
 export * from "./adero-member-documents";
 export * from "./adero-document-compliance-notifications";
+export * from "./adero-compliance-assignments";
 export * from "./adero-audit-logs";

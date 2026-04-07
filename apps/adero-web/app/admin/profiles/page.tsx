@@ -131,6 +131,28 @@ export default async function ProfilesPage() {
             {expiringSoonCount} expiring soon · {expiredCount} expired
           </p>
         </Link>
+
+        <Link
+          href="/admin/compliance"
+          className="rounded-xl border p-6 transition-colors hover:border-violet-500/40"
+          style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
+        >
+          <span
+            className="rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wider"
+            style={{ background: "rgba(139,92,246,0.12)", color: "#a78bfa" }}
+          >
+            Compliance
+          </span>
+          <p className="mt-5 text-3xl font-light" style={{ color: "#f1f5f9" }}>
+            &rarr;
+          </p>
+          <p className="mt-1 text-sm" style={{ color: "#64748b" }}>
+            Issue ownership and assignment workflow
+          </p>
+          <p className="mt-3 text-xs" style={{ color: "#475569" }}>
+            Assign and track internal follow-up
+          </p>
+        </Link>
       </div>
     </div>
   );

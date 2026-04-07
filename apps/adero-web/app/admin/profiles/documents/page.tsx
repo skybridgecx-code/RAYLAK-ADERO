@@ -3,10 +3,12 @@ import Link from "next/link";
 import { desc } from "drizzle-orm";
 import {
   aderoCompanyProfiles,
+  aderoComplianceAssignments,
   aderoDocumentComplianceNotifications,
   aderoMemberDocuments,
   aderoOperatorProfiles,
   db,
+  type AderoComplianceAssignment,
   type AderoMemberDocument,
 } from "@raylak/db";
 import { StatusBadge } from "~/components/status-badge";
@@ -69,9 +71,17 @@ function getMemberRef(document: AderoMemberDocument, members: Map<string, Member
   return key ? (members.get(key) ?? null) : null;
 }
 
+function getAssignmentKey(
+  memberType: AderoMemberType,
+  profileId: string,
+  documentType: string,
+) {
+  return `${memberType}:${profileId}:${documentType}`;
+}
+
 export default async function DocumentMonitoringPage() {
-  const [companyProfiles, operatorProfiles, documents, complianceNotifications] = await Promise.all(
-    [
+  const [companyProfiles, operatorProfiles, documents, complianceNotifications, assignments] =
+    await Promise.all([
       db.select().from(aderoCompanyProfiles),
       db.select().from(aderoOperatorProfiles),
       db.select().from(aderoMemberDocuments),
@@ -79,12 +89,26 @@ export default async function DocumentMonitoringPage() {
         .select()
         .from(aderoDocumentComplianceNotifications)
         .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
-    ],
-  );
+      db.select().from(aderoComplianceAssignments),
+    ]);
 
   const memberRefs = new Map<string, MemberRef>();
   const companyDocumentMap = new Map<string, AderoMemberDocument[]>();
   const operatorDocumentMap = new Map<string, AderoMemberDocument[]>();
+
+  // Build assignment lookup by issue key
+  const assignmentMap = new Map<string, AderoComplianceAssignment>();
+  for (const assignment of assignments) {
+    const profileId =
+      assignment.memberType === "company"
+        ? assignment.companyProfileId
+        : assignment.operatorProfileId;
+    if (!profileId) continue;
+    assignmentMap.set(
+      getAssignmentKey(assignment.memberType as AderoMemberType, profileId, assignment.documentType),
+      assignment,
+    );
+  }
 
   for (const profile of companyProfiles) {
     memberRefs.set(profile.id, {
@@ -282,6 +306,9 @@ export default async function DocumentMonitoringPage() {
                 entry.profileId,
                 entry.documentType as MemberDocumentType,
               );
+              const assignment = assignmentMap.get(
+                getAssignmentKey(entry.memberType, entry.profileId, entry.documentType),
+              );
 
               return (
                 <div
@@ -317,6 +344,11 @@ export default async function DocumentMonitoringPage() {
                     <p className="mt-2 text-xs" style={{ color: "#64748b" }}>
                       Missing: {MEMBER_DOCUMENT_TYPE_LABELS[entry.documentType]}
                     </p>
+                    {assignment ? (
+                      <p className="mt-1 text-[11px]" style={{ color: "#475569" }}>
+                        Owner: {assignment.assignedTo}
+                      </p>
+                    ) : null}
                     <div className="mt-3">
                       <DocumentComplianceActionForm
                         memberType={entry.memberType}
@@ -358,6 +390,9 @@ export default async function DocumentMonitoringPage() {
                 member.profileId,
                 document.documentType as MemberDocumentType,
               );
+              const assignment = assignmentMap.get(
+                getAssignmentKey(member.memberType, member.profileId, document.documentType),
+              );
 
               return (
                 <div
@@ -397,6 +432,11 @@ export default async function DocumentMonitoringPage() {
                         ? ` · ${daysRemaining} days remaining`
                         : ""}
                     </p>
+                    {assignment ? (
+                      <p className="mt-1 text-[11px]" style={{ color: "#475569" }}>
+                        Owner: {assignment.assignedTo}
+                      </p>
+                    ) : null}
                     <div className="mt-3">
                       <DocumentComplianceActionForm
                         memberType={member.memberType}
@@ -439,6 +479,9 @@ export default async function DocumentMonitoringPage() {
                 member.profileId,
                 document.documentType as MemberDocumentType,
               );
+              const assignment = assignmentMap.get(
+                getAssignmentKey(member.memberType, member.profileId, document.documentType),
+              );
 
               return (
                 <div
@@ -478,6 +521,11 @@ export default async function DocumentMonitoringPage() {
                         ? ` · ${Math.abs(daysRemaining)} days overdue`
                         : ""}
                     </p>
+                    {assignment ? (
+                      <p className="mt-1 text-[11px]" style={{ color: "#475569" }}>
+                        Owner: {assignment.assignedTo}
+                      </p>
+                    ) : null}
                     <div className="mt-3">
                       <DocumentComplianceActionForm
                         memberType={member.memberType}

@@ -55,25 +55,31 @@ export async function submitPortalDocument(
   const { token, memberType, profileId, documentType, memberNote, fileKey, fileName, fileSizeBytes } = result.data;
   const now = new Date();
 
-  // Verify the portal token still matches this profile (guards against stale tokens)
+  // Verify the portal token still matches this profile and is not expired.
   try {
     if (memberType === "company") {
       const [profile] = await db
-        .select({ id: aderoCompanyProfiles.id })
+        .select({ id: aderoCompanyProfiles.id, portalTokenExpiresAt: aderoCompanyProfiles.portalTokenExpiresAt })
         .from(aderoCompanyProfiles)
         .where(eq(aderoCompanyProfiles.portalToken, token))
         .limit(1);
       if (!profile || profile.id !== profileId) {
         return { error: "Session invalid. Please reload the page.", submitted: false };
       }
+      if (profile.portalTokenExpiresAt && profile.portalTokenExpiresAt <= new Date()) {
+        return { error: "This portal link has expired. Please contact your Adero representative.", submitted: false };
+      }
     } else {
       const [profile] = await db
-        .select({ id: aderoOperatorProfiles.id })
+        .select({ id: aderoOperatorProfiles.id, portalTokenExpiresAt: aderoOperatorProfiles.portalTokenExpiresAt })
         .from(aderoOperatorProfiles)
         .where(eq(aderoOperatorProfiles.portalToken, token))
         .limit(1);
       if (!profile || profile.id !== profileId) {
         return { error: "Session invalid. Please reload the page.", submitted: false };
+      }
+      if (profile.portalTokenExpiresAt && profile.portalTokenExpiresAt <= new Date()) {
+        return { error: "This portal link has expired. Please contact your Adero representative.", submitted: false };
       }
     }
 

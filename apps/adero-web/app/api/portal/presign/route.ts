@@ -33,12 +33,12 @@ export async function GET(request: Request) {
   // Resolve member from token
   const [companyRow, operatorRow] = await Promise.all([
     db
-      .select({ id: aderoCompanyProfiles.id })
+      .select({ id: aderoCompanyProfiles.id, portalTokenExpiresAt: aderoCompanyProfiles.portalTokenExpiresAt })
       .from(aderoCompanyProfiles)
       .where(eq(aderoCompanyProfiles.portalToken, token))
       .limit(1),
     db
-      .select({ id: aderoOperatorProfiles.id })
+      .select({ id: aderoOperatorProfiles.id, portalTokenExpiresAt: aderoOperatorProfiles.portalTokenExpiresAt })
       .from(aderoOperatorProfiles)
       .where(eq(aderoOperatorProfiles.portalToken, token))
       .limit(1),
@@ -49,6 +49,12 @@ export async function GET(request: Request) {
 
   if (!companyProfile && !operatorProfile) {
     return NextResponse.json({ error: "Invalid portal token." }, { status: 403 });
+  }
+
+  // Reject expired tokens
+  const expiresAt = companyProfile?.portalTokenExpiresAt ?? operatorProfile?.portalTokenExpiresAt ?? null;
+  if (expiresAt && expiresAt <= new Date()) {
+    return NextResponse.json({ error: "This portal link has expired." }, { status: 403 });
   }
 
   const memberType: "company" | "operator" = companyProfile ? "company" : "operator";

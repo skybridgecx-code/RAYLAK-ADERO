@@ -55,7 +55,8 @@ export async function rotatePortalToken(
 
         await tx
           .update(aderoCompanyProfiles)
-          .set({ portalToken: newToken, updatedAt: now })
+          // Rotation always clears portalTokenExpiresAt — fresh token is active indefinitely.
+          .set({ portalToken: newToken, portalTokenExpiresAt: null, updatedAt: now })
           .where(eq(aderoCompanyProfiles.id, profileId));
 
         await tx.insert(aderoAuditLogs).values({
@@ -83,7 +84,8 @@ export async function rotatePortalToken(
 
         await tx
           .update(aderoOperatorProfiles)
-          .set({ portalToken: newToken, updatedAt: now })
+          // Rotation always clears portalTokenExpiresAt — fresh token is active indefinitely.
+          .set({ portalToken: newToken, portalTokenExpiresAt: null, updatedAt: now })
           .where(eq(aderoOperatorProfiles.id, profileId));
 
         await tx.insert(aderoAuditLogs).values({
@@ -104,6 +106,98 @@ export async function rotatePortalToken(
   } catch (err) {
     console.error("[adero] rotatePortalToken failed:", err);
     return { error: "Token rotation failed. Please try again.", saved: false };
+  }
+
+  return { error: null, saved: true };
+}
+
+// ─── Expire portal token now ──────────────────────────────────────────────────
+
+const ExpireInput = z.object({
+  memberType: z.enum(["company", "operator"]),
+  profileId: z.string().uuid(),
+  actorName: z.string().trim().optional(),
+});
+
+export async function expirePortalToken(
+  _prev: PortalActionState,
+  formData: FormData,
+): Promise<PortalActionState> {
+  const result = ExpireInput.safeParse({
+    memberType: formData.get("memberType"),
+    profileId: formData.get("profileId"),
+    actorName: formData.get("actorName") ?? undefined,
+  });
+
+  if (!result.success) {
+    return { error: "Invalid request.", saved: false };
+  }
+
+  const { memberType, profileId, actorName } = result.data;
+  const actor = actorName?.trim() || "Adero admin";
+  const now = new Date();
+
+  try {
+    if (memberType === "company") {
+      await db.transaction(async (tx) => {
+        const [profile] = await tx
+          .select()
+          .from(aderoCompanyProfiles)
+          .where(eq(aderoCompanyProfiles.id, profileId));
+
+        if (!profile) throw new Error("Profile not found.");
+
+        await tx
+          .update(aderoCompanyProfiles)
+          .set({ portalTokenExpiresAt: now, updatedAt: now })
+          .where(eq(aderoCompanyProfiles.id, profileId));
+
+        await tx.insert(aderoAuditLogs).values({
+          entityType: "company_portal",
+          entityId: profile.id,
+          applicationId: profile.applicationId,
+          companyApplicationId: profile.applicationId,
+          companyProfileId: profile.id,
+          action: "portal_token_expired",
+          actorName: actor,
+          summary: `Portal access token manually expired for ${profile.companyName}. Link is now invalid.`,
+          createdAt: now,
+        });
+      });
+
+      revalidatePath(`/admin/profiles/companies/${profileId}`);
+    } else {
+      await db.transaction(async (tx) => {
+        const [profile] = await tx
+          .select()
+          .from(aderoOperatorProfiles)
+          .where(eq(aderoOperatorProfiles.id, profileId));
+
+        if (!profile) throw new Error("Profile not found.");
+
+        await tx
+          .update(aderoOperatorProfiles)
+          .set({ portalTokenExpiresAt: now, updatedAt: now })
+          .where(eq(aderoOperatorProfiles.id, profileId));
+
+        await tx.insert(aderoAuditLogs).values({
+          entityType: "operator_portal",
+          entityId: profile.id,
+          applicationId: profile.applicationId,
+          operatorApplicationId: profile.applicationId,
+          operatorProfileId: profile.id,
+          action: "portal_token_expired",
+          actorName: actor,
+          summary: `Portal access token manually expired for ${profile.fullName}. Link is now invalid.`,
+          createdAt: now,
+        });
+      });
+
+      revalidatePath(`/admin/profiles/operators/${profileId}`);
+    }
+  } catch (err) {
+    console.error("[adero] expirePortalToken failed:", err);
+    return { error: "Token expiry failed. Please try again.", saved: false };
   }
 
   return { error: null, saved: true };

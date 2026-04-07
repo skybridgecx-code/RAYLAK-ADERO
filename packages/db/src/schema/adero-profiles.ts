@@ -37,6 +37,10 @@ export const aderoCompanyProfiles = pgTable(
     // Member-facing portal access token. Share /portal/[portalToken] with the member.
     // Regenerating this token invalidates the old link.
     portalToken: uuid("portal_token").notNull().defaultRandom(),
+    // Optional expiry for the portal token. NULL = active indefinitely.
+    // Set to a past timestamp to block member access without rotating the token.
+    // Rotation always clears this field (fresh token = no expiry).
+    portalTokenExpiresAt: timestamp("portal_token_expires_at", { withTimezone: true }),
 
     activatedAt: timestamp("activated_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -79,6 +83,10 @@ export const aderoOperatorProfiles = pgTable(
     // Member-facing portal access token. Share /portal/[portalToken] with the member.
     // Regenerating this token invalidates the old link.
     portalToken: uuid("portal_token").notNull().defaultRandom(),
+    // Optional expiry for the portal token. NULL = active indefinitely.
+    // Set to a past timestamp to block member access without rotating the token.
+    // Rotation always clears this field (fresh token = no expiry).
+    portalTokenExpiresAt: timestamp("portal_token_expires_at", { withTimezone: true }),
 
     activatedAt: timestamp("activated_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

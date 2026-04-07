@@ -106,6 +106,27 @@ export default async function MemberPortalPage({
 
   if (!companyProfile && !operatorProfile) notFound();
 
+  // Check token expiry — render a clean expired page rather than 404.
+  const expiresAt = companyProfile?.portalTokenExpiresAt ?? operatorProfile?.portalTokenExpiresAt ?? null;
+  if (expiresAt && expiresAt <= new Date()) {
+    return (
+      <div className="space-y-6">
+        <div
+          className="rounded-xl border px-5 py-6 space-y-2"
+          style={{ borderColor: "rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.04)" }}
+        >
+          <p className="text-sm font-medium" style={{ color: "#f87171" }}>
+            This portal link has expired.
+          </p>
+          <p className="text-xs" style={{ color: "#64748b" }}>
+            This link is no longer valid. Please contact your Adero representative to receive an
+            updated link.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const memberType: AderoMemberType = companyProfile ? "company" : "operator";
   const profileId = companyProfile ? companyProfile.id : operatorProfile!.id;
   const memberName = companyProfile ? companyProfile.companyName : operatorProfile!.fullName;

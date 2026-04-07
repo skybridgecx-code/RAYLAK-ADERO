@@ -3,9 +3,14 @@
 import { useActionState, useState, useTransition } from "react";
 import type { AderoAuditLog } from "@raylak/db";
 import type { AderoMemberType } from "~/lib/document-monitoring";
-import { logPortalDeliveryEvent, rotatePortalToken, type PortalActionState } from "./portal-actions";
+import {
+  expirePortalToken,
+  logPortalDeliveryEvent,
+  rotatePortalToken,
+  type PortalActionState,
+} from "./portal-actions";
 
-const initialRotateState: PortalActionState = { error: null, saved: false };
+const initialState: PortalActionState = { error: null, saved: false };
 
 function fmtTimestamp(date: Date) {
   return date.toLocaleDateString("en-US", {
@@ -21,31 +26,63 @@ const EVENT_LABELS: Record<string, string> = {
   portal_link_copied: "Link copied",
   portal_link_shared: "Marked as shared",
   portal_token_rotated: "Token rotated",
+  portal_token_expired: "Token expired",
 };
+
+function TokenStateBadge({ expiresAt }: { expiresAt: Date | null }) {
+  const now = new Date();
+  if (expiresAt && expiresAt <= now) {
+    return (
+      <span
+        className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+        style={{ background: "rgba(239,68,68,0.12)", color: "#f87171" }}
+      >
+        Expired · {fmtTimestamp(expiresAt)}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+      style={{ background: "rgba(34,197,94,0.1)", color: "#4ade80" }}
+    >
+      Active
+    </span>
+  );
+}
 
 export function PortalLinkPanel({
   memberType,
   profileId,
   memberName,
   portalToken,
+  portalTokenExpiresAt,
   recentEvents,
 }: {
   memberType: AderoMemberType;
   profileId: string;
   memberName: string;
   portalToken: string;
+  portalTokenExpiresAt: Date | null;
   recentEvents: AderoAuditLog[];
 }) {
   const [copied, setCopied] = useState(false);
   const [shareLogged, setShareLogged] = useState(false);
   const [isConfirmingRotate, setIsConfirmingRotate] = useState(false);
+  const [isConfirmingExpire, setIsConfirmingExpire] = useState(false);
   const [, startTransition] = useTransition();
   const [rotateState, rotateAction, isRotating] = useActionState(
     rotatePortalToken,
-    initialRotateState,
+    initialState,
+  );
+  const [expireState, expireAction, isExpiring] = useActionState(
+    expirePortalToken,
+    initialState,
   );
 
   const portalPath = `/portal/${portalToken}`;
+  const now = new Date();
+  const isExpired = portalTokenExpiresAt !== null && portalTokenExpiresAt <= now;
 
   function buildDeliveryFormData(eventType: "link_copied" | "link_shared") {
     const fd = new FormData();
@@ -65,7 +102,6 @@ export function PortalLinkPanel({
     } catch {
       // Fallback: select the input text
     }
-    // Fire-and-forget delivery log
     startTransition(() => {
       void logPortalDeliveryEvent(buildDeliveryFormData("link_copied"));
     });
@@ -84,26 +120,42 @@ export function PortalLinkPanel({
       className="rounded-xl border p-5 space-y-5"
       style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
     >
-      <p
-        className="text-xs font-semibold uppercase tracking-[3px]"
-        style={{ color: "#475569" }}
-      >
-        Member Portal Link
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[3px]" style={{ color: "#475569" }}>
+          Member Portal Link
+        </p>
+        <TokenStateBadge expiresAt={portalTokenExpiresAt} />
+      </div>
+
+      {/* Expired notice */}
+      {isExpired && (
+        <div
+          className="rounded-lg border px-3 py-2.5"
+          style={{ borderColor: "rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.05)" }}
+        >
+          <p className="text-xs" style={{ color: "#f87171" }}>
+            This portal link is expired. The member cannot access it. Rotate the token below to
+            issue a new active link.
+          </p>
+        </div>
+      )}
 
       {/* Portal path display */}
       <div className="space-y-2">
         <p className="text-[11px]" style={{ color: "#475569" }}>
           Share this link with{" "}
-          <span style={{ color: "#94a3b8" }}>{memberName}</span> so they can view their
-          document status.
+          <span style={{ color: "#94a3b8" }}>{memberName}</span> so they can view their document
+          status.
         </p>
 
         <div
           className="flex items-center gap-2 rounded-lg border px-3 py-2"
           style={{ borderColor: "rgba(255,255,255,0.1)", background: "#0f172a" }}
         >
-          <code className="min-w-0 flex-1 truncate text-xs" style={{ color: "#6366f1" }}>
+          <code
+            className="min-w-0 flex-1 truncate text-xs"
+            style={{ color: isExpired ? "#475569" : "#6366f1" }}
+          >
             {portalPath}
           </code>
         </div>
@@ -112,7 +164,8 @@ export function PortalLinkPanel({
           <button
             type="button"
             onClick={handleCopy}
-            className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity"
+            disabled={isExpired}
+            className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-40"
             style={{
               background: copied ? "rgba(34,197,94,0.15)" : "rgba(99,102,241,0.15)",
               color: copied ? "#4ade80" : "#818cf8",
@@ -124,7 +177,7 @@ export function PortalLinkPanel({
           <button
             type="button"
             onClick={handleMarkShared}
-            disabled={shareLogged}
+            disabled={shareLogged || isExpired}
             className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-60"
             style={{
               background: shareLogged ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.06)",
@@ -136,15 +189,83 @@ export function PortalLinkPanel({
         </div>
       </div>
 
+      {/* Expire now */}
+      {!isExpired && (
+        <div className="border-t space-y-3 pt-4" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+          <p className="text-[11px] font-semibold uppercase tracking-[2px]" style={{ color: "#334155" }}>
+            Expire Link
+          </p>
+
+          {expireState.saved ? (
+            <p className="text-xs" style={{ color: "#4ade80" }}>
+              Link expired. The member can no longer access the portal with this URL. Rotate the
+              token below to issue a new link.
+            </p>
+          ) : isConfirmingExpire ? (
+            <div className="space-y-3">
+              <p className="text-xs" style={{ color: "#f87171" }}>
+                This will immediately block{" "}
+                <span style={{ color: "#94a3b8" }}>{memberName}</span> from accessing the portal.
+                The link URL stays the same but becomes invalid. You can issue a new link by
+                rotating the token.
+              </p>
+
+              <form action={expireAction} className="space-y-2">
+                <input type="hidden" name="memberType" value={memberType} />
+                <input type="hidden" name="profileId" value={profileId} />
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="submit"
+                    disabled={isExpiring}
+                    className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-50"
+                    style={{ background: "rgba(239,68,68,0.15)", color: "#f87171" }}
+                  >
+                    {isExpiring ? "Expiring…" : "Yes, expire now"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingExpire(false)}
+                    className="rounded-md px-3 py-1.5 text-xs transition-opacity"
+                    style={{ color: "#475569" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                {expireState.error && (
+                  <p className="text-xs" style={{ color: "#f87171" }}>
+                    {expireState.error}
+                  </p>
+                )}
+              </form>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-[11px]" style={{ color: "#475569" }}>
+                Immediately invalidate this link without issuing a new one.
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsConfirmingExpire(true)}
+                className="rounded-md px-3 py-1.5 text-xs font-medium transition-opacity"
+                style={{
+                  background: "rgba(239,68,68,0.08)",
+                  color: "#ef4444",
+                  border: "1px solid rgba(239,68,68,0.15)",
+                }}
+              >
+                Expire link now
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Rotate token */}
-      <div
-        className="border-t space-y-3 pt-4"
-        style={{ borderColor: "rgba(255,255,255,0.06)" }}
-      >
-        <p
-          className="text-[11px] font-semibold uppercase tracking-[2px]"
-          style={{ color: "#334155" }}
-        >
+      <div className="border-t space-y-3 pt-4" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <p className="text-[11px] font-semibold uppercase tracking-[2px]" style={{ color: "#334155" }}>
           Token Rotation
         </p>
 
@@ -155,9 +276,9 @@ export function PortalLinkPanel({
         ) : isConfirmingRotate ? (
           <div className="space-y-3">
             <p className="text-xs" style={{ color: "#f87171" }}>
-              This will invalidate the current portal link immediately.{" "}
-              <span style={{ color: "#94a3b8" }}>{memberName}</span> will need the new URL
-              to access their status page.
+              This will generate a new portal URL and invalidate the current one.{" "}
+              <span style={{ color: "#94a3b8" }}>{memberName}</span> will need the new URL to
+              access their status page. The new token will have no expiry set.
             </p>
 
             <form action={rotateAction} className="space-y-2">
@@ -194,7 +315,9 @@ export function PortalLinkPanel({
         ) : (
           <div className="space-y-2">
             <p className="text-[11px]" style={{ color: "#475569" }}>
-              If the current link has been compromised, rotate the token to invalidate it.
+              {isExpired
+                ? "Generate a new active link. The expired link will remain invalid."
+                : "If the current link has been compromised, rotate the token to invalidate it."}
             </p>
             <button
               type="button"
@@ -214,14 +337,8 @@ export function PortalLinkPanel({
 
       {/* Delivery history */}
       {recentEvents.length > 0 && (
-        <div
-          className="border-t space-y-3 pt-4"
-          style={{ borderColor: "rgba(255,255,255,0.06)" }}
-        >
-          <p
-            className="text-[11px] font-semibold uppercase tracking-[2px]"
-            style={{ color: "#334155" }}
-          >
+        <div className="border-t space-y-3 pt-4" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+          <p className="text-[11px] font-semibold uppercase tracking-[2px]" style={{ color: "#334155" }}>
             Delivery History
           </p>
           <div className="space-y-2">

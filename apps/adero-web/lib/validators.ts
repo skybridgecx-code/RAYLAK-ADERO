@@ -150,6 +150,21 @@ export const MEMBER_DOCUMENT_COMPLIANCE_ACTION_LABELS: Record<
   resolved: "Resolved",
 };
 
+// ─── Compliance escalation ───────────────────────────────────────────────────
+
+export const COMPLIANCE_ESCALATION_STATUSES = [
+  "normal",
+  "escalated",
+  "resolved_after_escalation",
+] as const;
+export type ComplianceEscalationStatus = (typeof COMPLIANCE_ESCALATION_STATUSES)[number];
+
+export const COMPLIANCE_ESCALATION_STATUS_LABELS: Record<ComplianceEscalationStatus, string> = {
+  normal: "Normal",
+  escalated: "Escalated",
+  resolved_after_escalation: "Resolved (Escalation)",
+};
+
 // ─── Shared action state ──────────────────────────────────────────────────────
 
 export interface ApplicationActionState {

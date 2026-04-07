@@ -4,11 +4,13 @@ import { desc } from "drizzle-orm";
 import {
   aderoCompanyProfiles,
   aderoComplianceAssignments,
+  aderoComplianceReviewNotes,
   aderoDocumentComplianceNotifications,
   aderoMemberDocuments,
   aderoOperatorProfiles,
   db,
   type AderoComplianceAssignment,
+  type AderoComplianceReviewNote,
   type AderoMemberDocument,
 } from "@raylak/db";
 import { StatusBadge } from "~/components/status-badge";
@@ -21,10 +23,13 @@ import {
 } from "~/lib/document-monitoring";
 import {
   MEMBER_DOCUMENT_TYPE_LABELS,
+  type ComplianceEscalationStatus,
   type MemberDocumentComplianceAction,
   type MemberDocumentType,
 } from "~/lib/validators";
 import { AssignComplianceForm } from "./assign-form";
+import { EscalationForm } from "./escalation-form";
+import { ReviewNoteForm } from "./review-note-form";
 
 export const metadata: Metadata = {
   title: "Compliance Dashboard - Adero Admin",
@@ -49,6 +54,7 @@ type ComplianceIssue = {
   daysRemaining: number | null;
   latestAction: MemberDocumentComplianceAction | null;
   assignment: AderoComplianceAssignment | null;
+  recentNotes: AderoComplianceReviewNote[];
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,6 +65,15 @@ function fmtDate(value: string | null) {
     month: "short",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+function fmtTimestamp(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -84,6 +99,10 @@ function isResolved(issue: ComplianceIssue) {
   return issue.latestAction === "resolved";
 }
 
+function escalationStatus(issue: ComplianceIssue): ComplianceEscalationStatus {
+  return (issue.assignment?.escalationStatus as ComplianceEscalationStatus) ?? "normal";
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function ComplianceDashboardPage({
@@ -94,30 +113,33 @@ export default async function ComplianceDashboardPage({
   const sp = await searchParams;
   const ownerFilter = typeof sp["owner"] === "string" ? sp["owner"].trim() : "";
   const stateFilter =
-    typeof sp["state"] === "string" &&
-    ["open", "resolved", "all"].includes(sp["state"])
+    typeof sp["state"] === "string" && ["open", "resolved", "all"].includes(sp["state"])
       ? (sp["state"] as "open" | "resolved" | "all")
       : "open";
+  const escalationFilter =
+    typeof sp["escalation"] === "string" &&
+    ["all", "escalated", "normal"].includes(sp["escalation"])
+      ? (sp["escalation"] as "all" | "escalated" | "normal")
+      : "all";
 
   // ── Load data ────────────────────────────────────────────────────────────────
-  const [
-    companyProfiles,
-    operatorProfiles,
-    documents,
-    complianceNotifications,
-    assignments,
-  ] = await Promise.all([
-    db.select().from(aderoCompanyProfiles),
-    db.select().from(aderoOperatorProfiles),
-    db.select().from(aderoMemberDocuments),
-    db
-      .select()
-      .from(aderoDocumentComplianceNotifications)
-      .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
-    db.select().from(aderoComplianceAssignments),
-  ]);
+  const [companyProfiles, operatorProfiles, documents, complianceNotifications, assignments, notes] =
+    await Promise.all([
+      db.select().from(aderoCompanyProfiles),
+      db.select().from(aderoOperatorProfiles),
+      db.select().from(aderoMemberDocuments),
+      db
+        .select()
+        .from(aderoDocumentComplianceNotifications)
+        .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
+      db.select().from(aderoComplianceAssignments),
+      db
+        .select()
+        .from(aderoComplianceReviewNotes)
+        .orderBy(desc(aderoComplianceReviewNotes.createdAt)),
+    ]);
 
-  // ── Build document maps ───────────────────────────────────────────────────
+  // ── Build document maps ────────────────────────────────────────────────────
   const companyDocumentMap = new Map<string, AderoMemberDocument[]>();
   const operatorDocumentMap = new Map<string, AderoMemberDocument[]>();
 
@@ -134,8 +156,7 @@ export default async function ComplianceDashboardPage({
     }
   }
 
-  // ── Build assignment lookup (by key) ──────────────────────────────────────
-  // Key: `member_type:profileId:documentType`
+  // ── Build assignment + notes lookups ──────────────────────────────────────
   const assignmentMap = new Map<string, AderoComplianceAssignment>();
   for (const assignment of assignments) {
     const profileId =
@@ -147,28 +168,45 @@ export default async function ComplianceDashboardPage({
     assignmentMap.set(key, assignment);
   }
 
+  // notes grouped by issue key → most recent first (already ordered by DESC)
+  const notesMap = new Map<string, AderoComplianceReviewNote[]>();
+  for (const note of notes) {
+    const profileId =
+      note.memberType === "company" ? note.companyProfileId : note.operatorProfileId;
+    if (!profileId) continue;
+    const key = `${note.memberType}:${profileId}:${note.documentType}`;
+    const existing = notesMap.get(key) ?? [];
+    existing.push(note);
+    notesMap.set(key, existing);
+  }
+
+  function issueKey(memberType: AderoMemberType, profileId: string, documentType: string) {
+    return `${memberType}:${profileId}:${documentType}`;
+  }
+
   function getAssignment(
     memberType: AderoMemberType,
     profileId: string,
     documentType: string,
   ): AderoComplianceAssignment | null {
-    return assignmentMap.get(`${memberType}:${profileId}:${documentType}`) ?? null;
+    return assignmentMap.get(issueKey(memberType, profileId, documentType)) ?? null;
   }
 
-  // ── Build issue list ─────────────────────────────────────────────────────
+  function getRecentNotes(
+    memberType: AderoMemberType,
+    profileId: string,
+    documentType: string,
+  ): AderoComplianceReviewNote[] {
+    return (notesMap.get(issueKey(memberType, profileId, documentType)) ?? []).slice(0, 3);
+  }
+
+  // ── Build issue list ───────────────────────────────────────────────────────
   const allIssues: ComplianceIssue[] = [];
 
-  // Missing required documents
   for (const profile of companyProfiles) {
     const docs = companyDocumentMap.get(profile.id) ?? [];
     const summary = getMemberDocumentSummary("company", docs);
     for (const documentType of summary.missingRequiredTypes) {
-      const latestAction = getCurrentComplianceAction(
-        complianceNotifications,
-        "company",
-        profile.id,
-        documentType,
-      );
       allIssues.push({
         kind: "missing",
         memberType: "company",
@@ -179,8 +217,14 @@ export default async function ComplianceDashboardPage({
         documentType,
         document: null,
         daysRemaining: null,
-        latestAction,
+        latestAction: getCurrentComplianceAction(
+          complianceNotifications,
+          "company",
+          profile.id,
+          documentType,
+        ),
         assignment: getAssignment("company", profile.id, documentType),
+        recentNotes: getRecentNotes("company", profile.id, documentType),
       });
     }
   }
@@ -189,12 +233,6 @@ export default async function ComplianceDashboardPage({
     const docs = operatorDocumentMap.get(profile.id) ?? [];
     const summary = getMemberDocumentSummary("operator", docs);
     for (const documentType of summary.missingRequiredTypes) {
-      const latestAction = getCurrentComplianceAction(
-        complianceNotifications,
-        "operator",
-        profile.id,
-        documentType,
-      );
       allIssues.push({
         kind: "missing",
         memberType: "operator",
@@ -206,13 +244,18 @@ export default async function ComplianceDashboardPage({
         documentType,
         document: null,
         daysRemaining: null,
-        latestAction,
+        latestAction: getCurrentComplianceAction(
+          complianceNotifications,
+          "operator",
+          profile.id,
+          documentType,
+        ),
         assignment: getAssignment("operator", profile.id, documentType),
+        recentNotes: getRecentNotes("operator", profile.id, documentType),
       });
     }
   }
 
-  // Expiring soon + expired documents
   for (const document of documents) {
     const displayStatus = getDocumentDisplayStatus(document);
     if (displayStatus !== "expiring_soon" && displayStatus !== "expired") continue;
@@ -244,13 +287,6 @@ export default async function ComplianceDashboardPage({
             .filter(Boolean)
             .join(", ") || profile.email;
 
-    const latestAction = getCurrentComplianceAction(
-      complianceNotifications,
-      memberType,
-      profileId,
-      document.documentType as MemberDocumentType,
-    );
-
     allIssues.push({
       kind: displayStatus,
       memberType,
@@ -260,26 +296,29 @@ export default async function ComplianceDashboardPage({
       memberHref: `/admin/profiles/${memberType === "company" ? "companies" : "operators"}/${profileId}`,
       documentType: document.documentType as MemberDocumentType,
       document,
-      daysRemaining: document.expirationDate
-        ? daysUntilExpiration(document.expirationDate)
-        : null,
-      latestAction,
+      daysRemaining: document.expirationDate ? daysUntilExpiration(document.expirationDate) : null,
+      latestAction: getCurrentComplianceAction(
+        complianceNotifications,
+        memberType,
+        profileId,
+        document.documentType as MemberDocumentType,
+      ),
       assignment: getAssignment(memberType, profileId, document.documentType),
+      recentNotes: getRecentNotes(memberType, profileId, document.documentType),
     });
   }
 
-  // ── Summary counts (always computed from all issues, before filters) ──────
+  // ── Summary counts (pre-filter) ────────────────────────────────────────────
   const unresolvedCount = allIssues.filter((i) => !isResolved(i)).length;
+  const escalatedCount = allIssues.filter((i) => escalationStatus(i) === "escalated").length;
   const missingCount = allIssues.filter((i) => i.kind === "missing").length;
   const expiringSoonCount = allIssues.filter((i) => i.kind === "expiring_soon").length;
   const expiredCount = allIssues.filter((i) => i.kind === "expired").length;
 
-  // ── Build owner list for filter dropdown ──────────────────────────────────
-  const allOwners = [
-    ...new Set(assignments.map((a) => a.assignedTo).filter(Boolean)),
-  ].sort();
+  // ── Build owner list ───────────────────────────────────────────────────────
+  const allOwners = [...new Set(assignments.map((a) => a.assignedTo).filter(Boolean))].sort();
 
-  // ── Apply filters ─────────────────────────────────────────────────────────
+  // ── Apply filters ──────────────────────────────────────────────────────────
   let filtered = allIssues;
 
   if (stateFilter === "open") {
@@ -288,22 +327,34 @@ export default async function ComplianceDashboardPage({
     filtered = filtered.filter((i) => isResolved(i));
   }
 
+  if (escalationFilter === "escalated") {
+    filtered = filtered.filter((i) => escalationStatus(i) === "escalated");
+  } else if (escalationFilter === "normal") {
+    filtered = filtered.filter((i) => escalationStatus(i) === "normal");
+  }
+
   if (ownerFilter === "unassigned") {
     filtered = filtered.filter((i) => !i.assignment);
   } else if (ownerFilter) {
     filtered = filtered.filter((i) => i.assignment?.assignedTo === ownerFilter);
   }
 
-  // Sort: unassigned first, then by kind (missing > expired > expiring)
+  // Sort: escalated first → unassigned → kind order
   const kindOrder: Record<IssueKind, number> = { missing: 0, expired: 1, expiring_soon: 2 };
   filtered.sort((a, b) => {
+    const escA = escalationStatus(a) === "escalated" ? 0 : 1;
+    const escB = escalationStatus(b) === "escalated" ? 0 : 1;
+    if (escA !== escB) return escA - escB;
     const assignedA = a.assignment ? 1 : 0;
     const assignedB = b.assignment ? 1 : 0;
     if (assignedA !== assignedB) return assignedA - assignedB;
     return (kindOrder[a.kind] ?? 3) - (kindOrder[b.kind] ?? 3);
   });
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const hasActiveFilters =
+    ownerFilter || stateFilter !== "open" || escalationFilter !== "all";
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -312,13 +363,13 @@ export default async function ComplianceDashboardPage({
           Compliance Dashboard
         </h1>
         <p className="mt-1 text-sm" style={{ color: "#475569" }}>
-          Open compliance issues across all activated Adero members. Assign and track internal
-          ownership.
+          Open compliance issues across all activated Adero members. Assign, review, and escalate
+          internal work.
         </p>
       </div>
 
       {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-5">
         <div
           className="rounded-xl border p-5"
           style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
@@ -334,6 +385,29 @@ export default async function ComplianceDashboardPage({
           </p>
           <p className="mt-1 text-xs" style={{ color: "#64748b" }}>
             Open compliance issues
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl border p-5"
+          style={{
+            borderColor:
+              escalatedCount > 0 ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.07)",
+            background:
+              escalatedCount > 0 ? "rgba(239,68,68,0.04)" : "rgba(255,255,255,0.02)",
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-[3px]"
+            style={{ color: "#475569" }}
+          >
+            Escalated
+          </p>
+          <p className="mt-4 text-3xl font-light" style={{ color: escalatedCount > 0 ? "#f87171" : "#f1f5f9" }}>
+            {escalatedCount}
+          </p>
+          <p className="mt-1 text-xs" style={{ color: "#64748b" }}>
+            Issues flagged for escalation
           </p>
         </div>
 
@@ -416,6 +490,26 @@ export default async function ComplianceDashboardPage({
 
         <div>
           <label className="mb-1.5 block text-xs font-medium" style={{ color: "#64748b" }}>
+            Escalation
+          </label>
+          <select
+            name="escalation"
+            defaultValue={escalationFilter}
+            className="rounded-lg border px-3 py-2 text-sm outline-none"
+            style={{
+              borderColor: "rgba(255,255,255,0.12)",
+              background: "#1e293b",
+              color: "#f1f5f9",
+            }}
+          >
+            <option value="all">All</option>
+            <option value="escalated">Escalated only</option>
+            <option value="normal">Normal only</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: "#64748b" }}>
             Owner
           </label>
           <select
@@ -446,7 +540,7 @@ export default async function ComplianceDashboardPage({
           Filter
         </button>
 
-        {(ownerFilter || stateFilter !== "open") && (
+        {hasActiveFilters && (
           <Link
             href="/admin/compliance"
             className="rounded-lg px-4 py-2 text-sm transition-colors hover:bg-white/5"
@@ -485,18 +579,22 @@ export default async function ComplianceDashboardPage({
           >
             {filtered.map((issue) => {
               const pill = memberPill(issue.memberType);
-              const issueKey = `${issue.memberType}:${issue.profileId}:${issue.documentType}`;
+              const key = `${issue.memberType}:${issue.profileId}:${issue.documentType}`;
+              const esc = escalationStatus(issue);
+              const isEscalated = esc === "escalated";
 
               return (
                 <div
-                  key={issueKey}
-                  className="px-5 py-5 space-y-3"
+                  key={key}
+                  className="px-5 py-5 space-y-4"
                   style={{
                     borderColor: "rgba(255,255,255,0.05)",
-                    background: "rgba(255,255,255,0.01)",
+                    background: isEscalated
+                      ? "rgba(239,68,68,0.03)"
+                      : "rgba(255,255,255,0.01)",
                   }}
                 >
-                  {/* Row 1: badges + member + doc info */}
+                  {/* Row 1: member + issue info */}
                   <div className="flex items-start gap-3">
                     <span
                       className="mt-0.5 shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wider"
@@ -515,7 +613,6 @@ export default async function ComplianceDashboardPage({
                           {issue.memberName}
                         </Link>
 
-                        {/* Issue kind badge */}
                         <span
                           className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
                           style={{
@@ -526,10 +623,11 @@ export default async function ComplianceDashboardPage({
                           {kindLabel(issue.kind)}
                         </span>
 
-                        {/* Compliance action badge */}
                         {issue.latestAction ? (
                           <StatusBadge status={issue.latestAction} />
                         ) : null}
+
+                        {esc !== "normal" ? <StatusBadge status={esc} /> : null}
                       </div>
 
                       <p className="mt-0.5 text-xs" style={{ color: "#475569" }}>
@@ -561,14 +659,15 @@ export default async function ComplianceDashboardPage({
                     </Link>
                   </div>
 
-                  {/* Row 2: assignment */}
+                  {/* Row 2: assignment + escalation */}
                   <div
-                    className="rounded-lg border px-4 py-3 space-y-2"
+                    className="rounded-lg border px-4 py-3 space-y-3"
                     style={{
                       borderColor: "rgba(255,255,255,0.06)",
                       background: "rgba(255,255,255,0.015)",
                     }}
                   >
+                    {/* Owner line */}
                     <div className="flex flex-wrap items-center gap-3">
                       <p
                         className="text-[11px] font-semibold uppercase tracking-[2px]"
@@ -580,7 +679,7 @@ export default async function ComplianceDashboardPage({
                         <span className="text-xs" style={{ color: "#94a3b8" }}>
                           {issue.assignment.assignedTo}
                           {issue.assignment.assignedBy
-                            ? ` · assigned by ${issue.assignment.assignedBy}`
+                            ? ` · by ${issue.assignment.assignedBy}`
                             : ""}
                         </span>
                       ) : (
@@ -590,17 +689,102 @@ export default async function ComplianceDashboardPage({
                       )}
                     </div>
 
-                    {issue.assignment?.notes && (
+                    {issue.assignment?.notes ? (
                       <p className="text-xs" style={{ color: "#64748b" }}>
                         {issue.assignment.notes}
                       </p>
-                    )}
+                    ) : null}
 
                     <AssignComplianceForm
                       memberType={issue.memberType}
                       profileId={issue.profileId}
                       documentType={issue.documentType}
                       currentAssignee={issue.assignment?.assignedTo ?? null}
+                    />
+
+                    {/* Escalation divider */}
+                    <div
+                      className="border-t pt-3 space-y-2"
+                      style={{ borderColor: "rgba(255,255,255,0.06)" }}
+                    >
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p
+                          className="text-[11px] font-semibold uppercase tracking-[2px]"
+                          style={{ color: "#475569" }}
+                        >
+                          Escalation
+                        </p>
+                        {esc !== "normal" ? (
+                          <>
+                            <StatusBadge status={esc} />
+                            {issue.assignment?.escalationNote ? (
+                              <span className="text-xs" style={{ color: "#64748b" }}>
+                                {issue.assignment.escalationNote}
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="text-xs" style={{ color: "#475569" }}>
+                            Normal
+                          </span>
+                        )}
+                      </div>
+
+                      <EscalationForm
+                        memberType={issue.memberType}
+                        profileId={issue.profileId}
+                        documentType={issue.documentType}
+                        currentStatus={esc}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: review notes */}
+                  <div
+                    className="rounded-lg border px-4 py-3 space-y-3"
+                    style={{
+                      borderColor: "rgba(255,255,255,0.06)",
+                      background: "rgba(255,255,255,0.015)",
+                    }}
+                  >
+                    <p
+                      className="text-[11px] font-semibold uppercase tracking-[2px]"
+                      style={{ color: "#475569" }}
+                    >
+                      Review Notes
+                    </p>
+
+                    {issue.recentNotes.length > 0 ? (
+                      <div className="space-y-2">
+                        {issue.recentNotes.map((n) => (
+                          <div
+                            key={n.id}
+                            className="rounded-md border px-3 py-2"
+                            style={{
+                              borderColor: "rgba(255,255,255,0.05)",
+                              background: "rgba(255,255,255,0.01)",
+                            }}
+                          >
+                            <p className="text-xs" style={{ color: "#cbd5e1" }}>
+                              {n.note}
+                            </p>
+                            <p className="mt-1 text-[11px]" style={{ color: "#475569" }}>
+                              {fmtTimestamp(n.createdAt)}
+                              {n.actorName ? ` · ${n.actorName}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs" style={{ color: "#334155" }}>
+                        No review notes yet.
+                      </p>
+                    )}
+
+                    <ReviewNoteForm
+                      memberType={issue.memberType}
+                      profileId={issue.profileId}
+                      documentType={issue.documentType}
                     />
                   </div>
                 </div>

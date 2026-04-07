@@ -23,6 +23,11 @@ export const aderoComplianceAssignments = pgTable(
     assignedBy: text("assigned_by"),
     notes: text("notes"),
 
+    // Escalation state — updated independently from assignment ownership.
+    // Values: 'normal' | 'escalated' | 'resolved_after_escalation'
+    escalationStatus: text("escalation_status").notNull().default("normal"),
+    escalationNote: text("escalation_note"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -43,6 +48,7 @@ export const aderoComplianceAssignments = pgTable(
       .where(sql`"member_type" = 'operator'`),
     index("adero_compliance_assignments_assigned_to_idx").on(t.assignedTo),
     index("adero_compliance_assignments_member_type_idx").on(t.memberType),
+    index("adero_compliance_assignments_escalation_status_idx").on(t.escalationStatus),
     index("adero_compliance_assignments_updated_at_idx").on(t.updatedAt),
   ],
 );

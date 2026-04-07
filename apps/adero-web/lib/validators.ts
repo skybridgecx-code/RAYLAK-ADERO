@@ -92,6 +92,53 @@ export const PROFILE_STATUS_LABELS: Record<ProfileStatus, string> = {
   inactive: "Inactive",
 };
 
+// ─── Internal member document tracking ───────────────────────────────────────
+
+export const MEMBER_DOCUMENT_TYPES = [
+  "insurance",
+  "license",
+  "permit",
+  "registration",
+  "contract",
+  "other",
+] as const;
+export type MemberDocumentType = (typeof MEMBER_DOCUMENT_TYPES)[number];
+
+export const MEMBER_DOCUMENT_TYPE_LABELS: Record<MemberDocumentType, string> = {
+  insurance: "Insurance",
+  license: "License",
+  permit: "Permit",
+  registration: "Registration",
+  contract: "Contract",
+  other: "Other",
+};
+
+export const REQUIRED_MEMBER_DOCUMENT_TYPES = [
+  "insurance",
+  "license",
+  "permit",
+  "registration",
+  "contract",
+] as const;
+
+export const MEMBER_DOCUMENT_STATUSES = [
+  "pending_review",
+  "approved",
+  "expired",
+  "rejected",
+] as const;
+export type MemberDocumentStatus = (typeof MEMBER_DOCUMENT_STATUSES)[number];
+
+export type MemberDocumentDisplayStatus = MemberDocumentStatus | "missing";
+
+export const MEMBER_DOCUMENT_STATUS_LABELS: Record<MemberDocumentDisplayStatus, string> = {
+  missing: "Missing",
+  pending_review: "Pending Review",
+  approved: "Approved",
+  expired: "Expired",
+  rejected: "Rejected",
+};
+
 // ─── Shared action state ──────────────────────────────────────────────────────
 
 export interface ApplicationActionState {

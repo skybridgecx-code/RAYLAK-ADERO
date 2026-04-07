@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { aderoAuditLogs, aderoCompanyApplications, aderoCompanyProfiles, db } from "@raylak/db";
+import {
+  aderoAuditLogs,
+  aderoCompanyApplications,
+  aderoCompanyProfiles,
+  aderoMemberDocuments,
+  db,
+} from "@raylak/db";
 import { desc, eq } from "drizzle-orm";
 import { StatusBadge } from "~/components/status-badge";
+import { REQUIRED_MEMBER_DOCUMENT_TYPES } from "~/lib/validators";
 import { PROFILE_STATUS_LABELS, type ProfileStatus } from "~/lib/validators";
 import { AuditHistory } from "../../../audit-history";
+import { DocumentTracking } from "../../document-tracking";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
 
 export const metadata: Metadata = {
@@ -17,7 +25,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CompanyProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [[row], auditEntries] = await Promise.all([
+  const [[row], auditEntries, documents] = await Promise.all([
     db
       .select({
         profile: aderoCompanyProfiles,
@@ -35,6 +43,11 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
       .where(eq(aderoAuditLogs.companyProfileId, id))
       .orderBy(desc(aderoAuditLogs.createdAt))
       .limit(25),
+    db
+      .select()
+      .from(aderoMemberDocuments)
+      .where(eq(aderoMemberDocuments.companyProfileId, id))
+      .orderBy(desc(aderoMemberDocuments.updatedAt)),
   ]);
 
   if (!row) notFound();
@@ -42,6 +55,16 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
   const { profile, application } = row;
   const profileStatusLabel =
     PROFILE_STATUS_LABELS[profile.activationStatus as ProfileStatus] ?? profile.activationStatus;
+  const trackedRequiredTypes = new Set(
+    documents
+      .map((document) => document.documentType)
+      .filter((documentType) =>
+        REQUIRED_MEMBER_DOCUMENT_TYPES.includes(
+          documentType as (typeof REQUIRED_MEMBER_DOCUMENT_TYPES)[number],
+        ),
+      ),
+  );
+  const missingRequiredCount = REQUIRED_MEMBER_DOCUMENT_TYPES.length - trackedRequiredTypes.size;
 
   return (
     <ProfileShell backHref="/admin/profiles/companies" backLabel="<- Company profiles">
@@ -138,6 +161,8 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
             )}
           </section>
 
+          <DocumentTracking documents={documents} memberType="company" profileId={profile.id} />
+
           <AuditHistory entries={auditEntries} />
         </div>
 
@@ -176,6 +201,14 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
                 Source status
               </span>
               <span style={{ color: "#64748b" }}>{application?.status ?? "unknown"}</span>
+            </p>
+            <p>
+              <span className="block" style={{ color: "#334155" }}>
+                Tracked documents
+              </span>
+              <span style={{ color: "#64748b" }}>
+                {documents.length} total / {missingRequiredCount} required missing
+              </span>
             </p>
             <p>
               <span className="block" style={{ color: "#334155" }}>

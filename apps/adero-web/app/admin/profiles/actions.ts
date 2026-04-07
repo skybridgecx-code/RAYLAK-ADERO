@@ -1,9 +1,22 @@
 "use server";
 
-import { aderoAuditLogs, aderoCompanyProfiles, aderoOperatorProfiles, db } from "@raylak/db";
+import {
+  aderoAuditLogs,
+  aderoCompanyProfiles,
+  aderoMemberDocuments,
+  aderoOperatorProfiles,
+  db,
+} from "@raylak/db";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { PROFILE_STATUSES, VEHICLE_TYPES } from "~/lib/validators";
+import {
+  MEMBER_DOCUMENT_STATUSES,
+  MEMBER_DOCUMENT_STATUS_LABELS,
+  MEMBER_DOCUMENT_TYPES,
+  MEMBER_DOCUMENT_TYPE_LABELS,
+  PROFILE_STATUSES,
+  VEHICLE_TYPES,
+} from "~/lib/validators";
 import { z } from "zod";
 
 export type ProfileActionState = {
@@ -11,6 +24,8 @@ export type ProfileActionState = {
   fieldErrors: Record<string, string[] | undefined>;
   saved: boolean;
 };
+
+export type DocumentActionState = ProfileActionState;
 
 const CompanyProfileInput = z.object({
   id: z.string().uuid(),
@@ -58,6 +73,22 @@ const OperatorProfileInput = z.object({
   actorName: z.string().trim().optional(),
 });
 
+const MemberDocumentInput = z.object({
+  memberType: z.enum(["company", "operator"]),
+  profileId: z.string().uuid(),
+  documentId: z.string().uuid().optional(),
+  title: z.string().trim().min(2, "Document title is required"),
+  documentType: z.enum(MEMBER_DOCUMENT_TYPES),
+  status: z.enum(MEMBER_DOCUMENT_STATUSES),
+  expirationDate: z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value), "Use YYYY-MM-DD"),
+  notes: z.string().trim().optional(),
+  actorName: z.string().trim().optional(),
+});
+
 function emptyToNull(value: string | null | undefined) {
   return value?.trim() ? value.trim() : null;
 }
@@ -70,6 +101,23 @@ function actorOrSystem(actorName: string | null | undefined) {
   return actorName?.trim() || "Adero admin";
 }
 
+function documentTypeLabel(documentType: string) {
+  return (
+    MEMBER_DOCUMENT_TYPE_LABELS[documentType as keyof typeof MEMBER_DOCUMENT_TYPE_LABELS] ??
+    documentType
+  );
+}
+
+function documentStatusLabel(status: string) {
+  return (
+    MEMBER_DOCUMENT_STATUS_LABELS[status as keyof typeof MEMBER_DOCUMENT_STATUS_LABELS] ?? status
+  );
+}
+
+function normalizeExpirationDate(value: string | null | undefined) {
+  return value?.trim() ? value.trim() : null;
+}
+
 function changedFields(changes: Array<[string, unknown, unknown]>) {
   return changes.filter(([, before, after]) => before !== after).map(([field]) => field);
 }
@@ -78,6 +126,17 @@ function changeDetails(fields: string[]) {
   return fields.length > 0
     ? `Updated fields: ${fields.join(", ")}`
     : "Saved without field changes.";
+}
+
+function revalidateMemberDocumentPaths(memberType: "company" | "operator", profileId: string) {
+  revalidatePath("/admin/profiles");
+  revalidatePath("/admin/profiles/companies");
+  revalidatePath("/admin/profiles/operators");
+  revalidatePath(
+    memberType === "company"
+      ? `/admin/profiles/companies/${profileId}`
+      : `/admin/profiles/operators/${profileId}`,
+  );
 }
 
 export async function updateCompanyProfile(
@@ -284,5 +343,248 @@ export async function updateOperatorProfile(
   if (applicationId) {
     revalidatePath(`/admin/operator/${applicationId}`);
   }
+  return { error: null, fieldErrors: {}, saved: true };
+}
+
+export async function createMemberDocument(
+  _prev: DocumentActionState,
+  formData: FormData,
+): Promise<DocumentActionState> {
+  const result = MemberDocumentInput.safeParse({
+    memberType: formData.get("memberType"),
+    profileId: formData.get("profileId"),
+    title: formData.get("title"),
+    documentType: formData.get("documentType"),
+    status: formData.get("status"),
+    expirationDate: formData.get("expirationDate") ?? undefined,
+    notes: formData.get("notes") ?? undefined,
+    actorName: formData.get("actorName") ?? undefined,
+  });
+
+  if (!result.success) {
+    return {
+      error: "Please fix the highlighted fields.",
+      fieldErrors: result.error.flatten().fieldErrors,
+      saved: false,
+    };
+  }
+
+  const data = result.data;
+  const now = new Date();
+
+  try {
+    await db.transaction(async (tx) => {
+      const member =
+        data.memberType === "company"
+          ? await (async () => {
+              const [profile] = await tx
+                .select()
+                .from(aderoCompanyProfiles)
+                .where(eq(aderoCompanyProfiles.id, data.profileId));
+
+              if (!profile) throw new Error("Company profile not found.");
+
+              return {
+                applicationId: profile.applicationId,
+                companyProfileId: profile.id,
+                operatorProfileId: null,
+                memberName: profile.companyName,
+              };
+            })()
+          : await (async () => {
+              const [profile] = await tx
+                .select()
+                .from(aderoOperatorProfiles)
+                .where(eq(aderoOperatorProfiles.id, data.profileId));
+
+              if (!profile) throw new Error("Operator profile not found.");
+
+              return {
+                applicationId: profile.applicationId,
+                companyProfileId: null,
+                operatorProfileId: profile.id,
+                memberName: profile.fullName,
+              };
+            })();
+      const [document] = await tx
+        .insert(aderoMemberDocuments)
+        .values({
+          memberType: data.memberType,
+          companyProfileId: member.companyProfileId,
+          operatorProfileId: member.operatorProfileId,
+          title: data.title,
+          documentType: data.documentType,
+          status: data.status,
+          expirationDate: normalizeExpirationDate(data.expirationDate),
+          notes: emptyToNull(data.notes),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      if (!document) throw new Error("Document creation failed.");
+
+      await tx.insert(aderoAuditLogs).values({
+        entityType: `${data.memberType}_document`,
+        entityId: document.id,
+        applicationId: member.applicationId,
+        companyProfileId: member.companyProfileId,
+        operatorProfileId: member.operatorProfileId,
+        action: "member_document_created",
+        actorName: actorOrSystem(data.actorName),
+        summary: `${documentTypeLabel(data.documentType)} document added for ${member.memberName}.`,
+        details: [
+          `Title: ${document.title}`,
+          `Status: ${documentStatusLabel(document.status)}`,
+          document.expirationDate ? `Expiration: ${document.expirationDate}` : null,
+          document.notes ? `Notes: ${document.notes}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        createdAt: now,
+      });
+    });
+  } catch (err) {
+    console.error("[adero] createMemberDocument failed:", err);
+    return {
+      error: "Document save failed. Please try again.",
+      fieldErrors: {},
+      saved: false,
+    };
+  }
+
+  revalidateMemberDocumentPaths(data.memberType, data.profileId);
+  return { error: null, fieldErrors: {}, saved: true };
+}
+
+export async function updateMemberDocument(
+  _prev: DocumentActionState,
+  formData: FormData,
+): Promise<DocumentActionState> {
+  const result = MemberDocumentInput.safeParse({
+    memberType: formData.get("memberType"),
+    profileId: formData.get("profileId"),
+    documentId: formData.get("documentId") ?? undefined,
+    title: formData.get("title"),
+    documentType: formData.get("documentType"),
+    status: formData.get("status"),
+    expirationDate: formData.get("expirationDate") ?? undefined,
+    notes: formData.get("notes") ?? undefined,
+    actorName: formData.get("actorName") ?? undefined,
+  });
+
+  if (!result.success || !result.data.documentId) {
+    return {
+      error: "Please fix the highlighted fields.",
+      fieldErrors: result.success ? {} : result.error.flatten().fieldErrors,
+      saved: false,
+    };
+  }
+
+  const documentId = result.data.documentId;
+  if (!documentId) {
+    return { error: "Please fix the highlighted fields.", fieldErrors: {}, saved: false };
+  }
+
+  const data = { ...result.data, documentId };
+  const now = new Date();
+  const next = {
+    title: data.title,
+    documentType: data.documentType,
+    status: data.status,
+    expirationDate: normalizeExpirationDate(data.expirationDate),
+    notes: emptyToNull(data.notes),
+  };
+
+  try {
+    await db.transaction(async (tx) => {
+      const member =
+        data.memberType === "company"
+          ? await (async () => {
+              const [profile] = await tx
+                .select()
+                .from(aderoCompanyProfiles)
+                .where(eq(aderoCompanyProfiles.id, data.profileId));
+
+              if (!profile) throw new Error("Company profile not found.");
+
+              return {
+                applicationId: profile.applicationId,
+                companyProfileId: profile.id,
+                operatorProfileId: null,
+                memberName: profile.companyName,
+              };
+            })()
+          : await (async () => {
+              const [profile] = await tx
+                .select()
+                .from(aderoOperatorProfiles)
+                .where(eq(aderoOperatorProfiles.id, data.profileId));
+
+              if (!profile) throw new Error("Operator profile not found.");
+
+              return {
+                applicationId: profile.applicationId,
+                companyProfileId: null,
+                operatorProfileId: profile.id,
+                memberName: profile.fullName,
+              };
+            })();
+      const [document] = await tx
+        .select()
+        .from(aderoMemberDocuments)
+        .where(eq(aderoMemberDocuments.id, data.documentId));
+
+      if (!document) throw new Error("Document not found.");
+      if (
+        document.memberType !== data.memberType ||
+        document.companyProfileId !== member.companyProfileId ||
+        document.operatorProfileId !== member.operatorProfileId
+      ) {
+        throw new Error("Document does not belong to this profile.");
+      }
+
+      const fields = changedFields([
+        ["title", document.title, next.title],
+        ["document type", document.documentType, next.documentType],
+        ["status", document.status, next.status],
+        ["expiration date", document.expirationDate, next.expirationDate],
+        ["notes", document.notes, next.notes],
+      ]);
+
+      await tx
+        .update(aderoMemberDocuments)
+        .set({ ...next, updatedAt: now })
+        .where(eq(aderoMemberDocuments.id, data.documentId));
+
+      await tx.insert(aderoAuditLogs).values({
+        entityType: `${data.memberType}_document`,
+        entityId: document.id,
+        applicationId: member.applicationId,
+        companyProfileId: member.companyProfileId,
+        operatorProfileId: member.operatorProfileId,
+        action:
+          document.status !== next.status
+            ? "member_document_status_changed"
+            : "member_document_updated",
+        actorName: actorOrSystem(data.actorName),
+        summary:
+          document.status !== next.status
+            ? `${documentTypeLabel(next.documentType)} document status changed from ${documentStatusLabel(document.status)} to ${documentStatusLabel(next.status)}.`
+            : `${documentTypeLabel(next.documentType)} document updated for ${member.memberName}.`,
+        details: changeDetails(fields),
+        createdAt: now,
+      });
+    });
+  } catch (err) {
+    console.error("[adero] updateMemberDocument failed:", err);
+    return {
+      error: "Document update failed. Please try again.",
+      fieldErrors: {},
+      saved: false,
+    };
+  }
+
+  revalidateMemberDocumentPaths(data.memberType, data.profileId);
   return { error: null, fieldErrors: {}, saved: true };
 }

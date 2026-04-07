@@ -1,11 +1,16 @@
 import {
   APPLICATION_STATUS_LABELS,
+  MEMBER_DOCUMENT_STATUS_LABELS,
   PROFILE_STATUS_LABELS,
   type ApplicationStatus,
+  type MemberDocumentDisplayStatus,
   type ProfileStatus,
 } from "~/lib/validators";
 
-const STATUS_COLORS: Record<ApplicationStatus | ProfileStatus, { bg: string; color: string }> = {
+const STATUS_COLORS: Record<
+  ApplicationStatus | ProfileStatus | MemberDocumentDisplayStatus,
+  { bg: string; color: string }
+> = {
   pending: { bg: "rgba(99,102,241,0.15)", color: "#818cf8" }, // indigo — new/unreviewed
   reviewing: { bg: "rgba(234,179,8,0.15)", color: "#facc15" }, // yellow — in review
   approved: { bg: "rgba(249,115,22,0.15)", color: "#fb923c" }, // orange — approved, pending activation
@@ -14,14 +19,18 @@ const STATUS_COLORS: Record<ApplicationStatus | ProfileStatus, { bg: string; col
   active: { bg: "rgba(34,197,94,0.2)", color: "#22c55e" },
   paused: { bg: "rgba(234,179,8,0.15)", color: "#facc15" },
   inactive: { bg: "rgba(148,163,184,0.15)", color: "#94a3b8" },
+  missing: { bg: "rgba(148,163,184,0.15)", color: "#94a3b8" },
+  pending_review: { bg: "rgba(234,179,8,0.15)", color: "#facc15" },
+  expired: { bg: "rgba(239,68,68,0.15)", color: "#f87171" },
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const s = status as ApplicationStatus | ProfileStatus;
+  const s = status as ApplicationStatus | ProfileStatus | MemberDocumentDisplayStatus;
   const colors = STATUS_COLORS[s] ?? { bg: "rgba(148,163,184,0.15)", color: "#94a3b8" };
   const label =
     APPLICATION_STATUS_LABELS[s as ApplicationStatus] ??
     PROFILE_STATUS_LABELS[s as ProfileStatus] ??
+    MEMBER_DOCUMENT_STATUS_LABELS[s as MemberDocumentDisplayStatus] ??
     status;
 
   return (

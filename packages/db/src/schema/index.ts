@@ -7,4 +7,5 @@ export * from "./booking-status-log";
 export * from "./notifications";
 export * from "./adero-applications";
 export * from "./adero-profiles";
+export * from "./adero-member-documents";
 export * from "./adero-audit-logs";

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { aderoCompanyProfiles, aderoOperatorProfiles } from "./adero-profiles";
 
 /**
@@ -7,7 +7,8 @@ import { aderoCompanyProfiles, aderoOperatorProfiles } from "./adero-profiles";
  *
  * When a member uses the token-gated portal to notify Adero of a document
  * submission, a row is inserted here. Admin staff review and resolve it.
- * This is metadata only — no file storage in this table.
+ * File metadata (S3 key, original name, size) is stored when a member attaches
+ * a file via the presigned S3 upload flow.
  */
 export const aderoPortalSubmissions = pgTable(
   "adero_portal_submissions",
@@ -19,6 +20,11 @@ export const aderoPortalSubmissions = pgTable(
 
     documentType: text("document_type").notNull(),
     memberNote: text("member_note").notNull(),
+
+    // Optional file attachment — populated after S3 presigned upload
+    fileKey: text("file_key"),       // S3 object key
+    fileName: text("file_name"),     // original filename for display
+    fileSizeBytes: integer("file_size_bytes"),
 
     // pending | reviewed | dismissed
     status: text("status").notNull().default("pending"),

@@ -1,5 +1,6 @@
 import type { AderoPortalSubmission } from "@raylak/db";
 import type { AderoMemberType } from "~/lib/document-monitoring";
+import { createPresignedGet } from "~/lib/s3";
 import { MEMBER_DOCUMENT_TYPE_LABELS, type MemberDocumentType } from "~/lib/validators";
 import { reviewPortalSubmission } from "./portal-submission-actions";
 
@@ -13,6 +14,11 @@ function fmtTimestamp(date: Date) {
   });
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 type StatusStyle = { label: string; bg: string; color: string };
 
 const STATUS_STYLES: Record<"pending" | "reviewed" | "dismissed", StatusStyle> = {
@@ -23,7 +29,7 @@ const STATUS_STYLES: Record<"pending" | "reviewed" | "dismissed", StatusStyle> =
 
 const FALLBACK_STATUS: StatusStyle = STATUS_STYLES.pending;
 
-export function PortalSubmissionsPanel({
+export async function PortalSubmissionsPanel({
   submissions,
   memberType,
   profileId,
@@ -33,6 +39,21 @@ export function PortalSubmissionsPanel({
   profileId: string;
 }) {
   if (submissions.length === 0) return null;
+
+  // Generate presigned GET URLs for any submissions that have a file attachment
+  const downloadUrls = new Map<string, string>();
+  await Promise.all(
+    submissions
+      .filter((s) => s.fileKey)
+      .map(async (s) => {
+        try {
+          const url = await createPresignedGet(s.fileKey!);
+          downloadUrls.set(s.id, url);
+        } catch {
+          // Best-effort — don't fail the page if presign fails
+        }
+      }),
+  );
 
   return (
     <div
@@ -50,13 +71,18 @@ export function PortalSubmissionsPanel({
               ? STATUS_STYLES[sub.status as keyof typeof STATUS_STYLES]
               : null) ?? FALLBACK_STATUS;
           const docLabel =
-            MEMBER_DOCUMENT_TYPE_LABELS[sub.documentType as MemberDocumentType] ?? sub.documentType;
+            MEMBER_DOCUMENT_TYPE_LABELS[sub.documentType as MemberDocumentType] ??
+            sub.documentType;
+          const downloadUrl = downloadUrls.get(sub.id);
 
           return (
             <div
               key={sub.id}
               className="space-y-3 rounded-lg border p-4"
-              style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)" }}
+              style={{
+                borderColor: "rgba(255,255,255,0.06)",
+                background: "rgba(255,255,255,0.01)",
+              }}
             >
               {/* Header row */}
               <div className="flex flex-wrap items-start gap-2">
@@ -81,6 +107,31 @@ export function PortalSubmissionsPanel({
               <p className="text-xs leading-relaxed" style={{ color: "#94a3b8" }}>
                 {sub.memberNote}
               </p>
+
+              {/* File attachment */}
+              {sub.fileName && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px]" style={{ color: "#475569" }}>
+                    📎 {sub.fileName}
+                    {sub.fileSizeBytes ? ` · ${formatBytes(sub.fileSizeBytes)}` : ""}
+                  </span>
+                  {downloadUrl ? (
+                    <a
+                      href={downloadUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-medium transition-opacity hover:opacity-80"
+                      style={{ color: "#6366f1" }}
+                    >
+                      Download ↗
+                    </a>
+                  ) : (
+                    <span className="text-[11px]" style={{ color: "#334155" }}>
+                      (link unavailable)
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Reviewed-by context */}
               {sub.status !== "pending" && sub.reviewedBy && (

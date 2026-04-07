@@ -27,6 +27,10 @@ const SubmitInput = z.object({
     .trim()
     .min(5, "Please describe what you are submitting (at least 5 characters).")
     .max(1000, "Note must be 1000 characters or fewer."),
+  // Optional — populated when a file was uploaded via presigned URL before form submit
+  fileKey: z.string().min(1).optional(),
+  fileName: z.string().min(1).optional(),
+  fileSizeBytes: z.coerce.number().int().positive().optional(),
 });
 
 export async function submitPortalDocument(
@@ -39,13 +43,16 @@ export async function submitPortalDocument(
     profileId: formData.get("profileId"),
     documentType: formData.get("documentType"),
     memberNote: formData.get("memberNote"),
+    fileKey: formData.get("fileKey") ?? undefined,
+    fileName: formData.get("fileName") ?? undefined,
+    fileSizeBytes: formData.get("fileSizeBytes") ?? undefined,
   });
 
   if (!result.success) {
     return { error: result.error.errors[0]?.message ?? "Invalid submission.", submitted: false };
   }
 
-  const { token, memberType, profileId, documentType, memberNote } = result.data;
+  const { token, memberType, profileId, documentType, memberNote, fileKey, fileName, fileSizeBytes } = result.data;
   const now = new Date();
 
   // Verify the portal token still matches this profile (guards against stale tokens)
@@ -77,6 +84,9 @@ export async function submitPortalDocument(
         operatorProfileId: memberType === "operator" ? profileId : null,
         documentType,
         memberNote,
+        fileKey: fileKey ?? null,
+        fileName: fileName ?? null,
+        fileSizeBytes: fileSizeBytes ?? null,
         status: "pending",
         createdAt: now,
         updatedAt: now,
@@ -89,7 +99,7 @@ export async function submitPortalDocument(
         operatorProfileId: memberType === "operator" ? profileId : null,
         action: "portal_document_submitted",
         actorName: null,
-        summary: `Member submitted document update for ${documentType} via portal.`,
+        summary: `Member submitted document update for ${documentType} via portal.${fileKey ? " File attached." : ""}`,
         createdAt: now,
       });
     });

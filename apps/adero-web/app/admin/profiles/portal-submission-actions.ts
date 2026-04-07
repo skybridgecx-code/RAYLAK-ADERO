@@ -102,6 +102,7 @@ export async function reviewPortalSubmission(formData: FormData): Promise<void> 
       : `/admin/profiles/operators/${profileId}`,
   );
   revalidatePath("/admin/submissions");
+  revalidatePath(`/admin/submissions/${submissionId}`);
 
   const [portalRow] = memberType === "company"
     ? await db

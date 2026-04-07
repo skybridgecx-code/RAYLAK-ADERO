@@ -268,6 +268,18 @@ export async function submitPortalDocument(
         submitted: false,
       };
     }
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      ((err as { code?: string }).code === "P0001" || (err as { code?: string }).code === "23514")
+    ) {
+      return {
+        error:
+          "Submission chain validation failed. Please refresh and try again.",
+        submitted: false,
+      };
+    }
     console.error("[adero] submitPortalDocument failed:", err);
     return { error: "Submission failed. Please try again.", submitted: false };
   }

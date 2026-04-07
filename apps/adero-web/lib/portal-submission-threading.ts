@@ -14,6 +14,12 @@ function compareByCreatedDesc<T extends { createdAt: Date; id: string }>(a: T, b
   return b.id.localeCompare(a.id);
 }
 
+function compareByCreatedAsc<T extends { createdAt: Date; id: string }>(a: T, b: T) {
+  const timeDiff = a.createdAt.getTime() - b.createdAt.getTime();
+  if (timeDiff !== 0) return timeDiff;
+  return a.id.localeCompare(b.id);
+}
+
 export function isAcceptedSubmissionStatus(status: string) {
   return status === "accepted" || status === "reviewed";
 }
@@ -75,4 +81,57 @@ export function getCurrentSubmissionByDocumentType<T extends PortalSubmissionThr
   }
 
   return currentByDocumentType;
+}
+
+export function getChainTimelineForSubmission<T extends PortalSubmissionThreadNode>({
+  submissions,
+  submissionId,
+}: {
+  submissions: T[];
+  submissionId: string;
+}) {
+  const byId = new Map(submissions.map((submission) => [submission.id, submission]));
+  const target = byId.get(submissionId) ?? null;
+  if (!target) return { timeline: [] as T[], warnings: ["Submission not found in chain scope."] };
+
+  const supersededBy = getSupersededByMap(submissions);
+  const warnings: string[] = [];
+
+  const ancestorVisited = new Set<string>([target.id]);
+  let root = target;
+  while (root.supersedesSubmissionId) {
+    const parent = byId.get(root.supersedesSubmissionId);
+    if (!parent) {
+      warnings.push(`Missing parent submission ${root.supersedesSubmissionId}.`);
+      break;
+    }
+    if (ancestorVisited.has(parent.id)) {
+      warnings.push("Cycle detected while traversing parent links.");
+      break;
+    }
+    ancestorVisited.add(parent.id);
+    root = parent;
+  }
+
+  const timeline: T[] = [];
+  const timelineVisited = new Set<string>();
+  let cursor: T | null = root;
+  while (cursor) {
+    if (timelineVisited.has(cursor.id)) {
+      warnings.push("Cycle detected while traversing successor links.");
+      break;
+    }
+    timelineVisited.add(cursor.id);
+    timeline.push(cursor);
+    cursor = supersededBy.get(cursor.id) ?? null;
+  }
+
+  if (!timelineVisited.has(target.id)) {
+    timeline.push(target);
+    timeline.sort(compareByCreatedAsc);
+    warnings.push("Selected submission is disconnected from computed chain path.");
+  }
+
+  const sortedTimeline = [...timeline].sort(compareByCreatedAsc);
+  return { timeline: sortedTimeline, warnings };
 }

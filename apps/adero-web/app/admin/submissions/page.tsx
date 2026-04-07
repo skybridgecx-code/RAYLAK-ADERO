@@ -485,6 +485,14 @@ export default async function SubmissionsInboxPage({
 
                 {/* Actions row */}
                 <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Link
+                    href={`/admin/submissions/${sub.id}`}
+                    className="text-[11px] transition-opacity hover:opacity-70"
+                    style={{ color: "#818cf8" }}
+                  >
+                    View chain timeline →
+                  </Link>
+
                   {/* Profile link */}
                   {profileHref && (
                     <Link

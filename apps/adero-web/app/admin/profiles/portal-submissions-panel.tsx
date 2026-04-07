@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { AderoPortalSubmission } from "@raylak/db";
 import type { AderoMemberType } from "~/lib/document-monitoring";
 import { getSupersededByMap } from "~/lib/portal-submission-threading";
@@ -184,6 +185,14 @@ export async function PortalSubmissionsPanel({
               )}
 
               {/* Review actions — only for pending */}
+              <Link
+                href={`/admin/submissions/${sub.id}`}
+                className="inline-block text-[11px] transition-opacity hover:opacity-70"
+                style={{ color: "#818cf8" }}
+              >
+                View chain timeline →
+              </Link>
+
               {sub.status === "pending" && !newerSubmission && (
                 <form action={reviewPortalSubmission} className="flex flex-wrap items-center gap-2">
                   <input type="hidden" name="submissionId" value={sub.id} />

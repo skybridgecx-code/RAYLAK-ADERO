@@ -229,6 +229,25 @@ export default async function OperatorProfilePage({ params }: { params: Promise<
               <span style={{ color: "#64748b" }}>{fmt(profile.updatedAt)}</span>
             </p>
           </div>
+
+          <div className="mt-5 border-t pt-5 space-y-2" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+            <p className="text-[11px] font-semibold uppercase tracking-[2px]" style={{ color: "#334155" }}>
+              Member Portal
+            </p>
+            <p className="text-[11px]" style={{ color: "#475569" }}>
+              Share this link with the member for their document status page.
+            </p>
+            <code
+              className="block break-all rounded-md border px-2.5 py-2 text-[11px] leading-relaxed"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                background: "#0f172a",
+                color: "#14b8a6",
+              }}
+            >
+              /portal/{profile.portalToken}
+            </code>
+          </div>
         </div>
       </div>
     </ProfileShell>

@@ -1,4 +1,12 @@
-import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { aderoCompanyApplications, aderoOperatorApplications } from "./adero-applications";
 
 /**
@@ -26,12 +34,17 @@ export const aderoCompanyProfiles = pgTable(
     serviceNotes: text("service_notes"),
     activationStatus: text("activation_status").notNull().default("active"),
 
+    // Member-facing portal access token. Share /portal/[portalToken] with the member.
+    // Regenerating this token invalidates the old link.
+    portalToken: uuid("portal_token").notNull().defaultRandom(),
+
     activatedAt: timestamp("activated_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("adero_company_profiles_application_id_uidx").on(t.applicationId),
+    uniqueIndex("adero_company_profiles_portal_token_uidx").on(t.portalToken),
     index("adero_company_profiles_status_idx").on(t.activationStatus),
     index("adero_company_profiles_company_name_idx").on(t.companyName),
     index("adero_company_profiles_activated_at_idx").on(t.activatedAt),
@@ -63,12 +76,17 @@ export const aderoOperatorProfiles = pgTable(
     serviceNotes: text("service_notes"),
     activationStatus: text("activation_status").notNull().default("active"),
 
+    // Member-facing portal access token. Share /portal/[portalToken] with the member.
+    // Regenerating this token invalidates the old link.
+    portalToken: uuid("portal_token").notNull().defaultRandom(),
+
     activatedAt: timestamp("activated_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("adero_operator_profiles_application_id_uidx").on(t.applicationId),
+    uniqueIndex("adero_operator_profiles_portal_token_uidx").on(t.portalToken),
     index("adero_operator_profiles_status_idx").on(t.activationStatus),
     index("adero_operator_profiles_full_name_idx").on(t.fullName),
     index("adero_operator_profiles_activated_at_idx").on(t.activatedAt),

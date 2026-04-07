@@ -240,7 +240,33 @@ export default async function MemberPortalPage({
     .filter((value): value is MemberDocumentType => value !== null);
 
   const submissionDocTypes = Array.from(new Set([...attentionTypes, ...resubmissionTypes]));
-  const attentionLabels = submissionDocTypes.map((t) => MEMBER_DOCUMENT_TYPE_LABELS[t]);
+
+  // ── Renewal / expiry-specific notices ─────────────────────────────────────
+  // Separate expiry-driven renewal needs from staff-triggered compliance follow-ups
+  // so the portal can surface them with distinct, targeted messaging.
+  const renewalEntries = requiredDocStatus.filter(
+    (entry) =>
+      entry.displayStatus === "expired" || entry.displayStatus === "expiring_soon",
+  );
+  const renewalLabels = renewalEntries.map(
+    (entry) =>
+      MEMBER_DOCUMENT_TYPE_LABELS[entry.documentType as MemberDocumentType] ?? entry.documentType,
+  );
+
+  // Staff-requested follow-ups that are NOT already surfaced as expiry renewals
+  const renewalTypeSet = new Set(renewalEntries.map((e) => e.documentType));
+  const complianceOnlyFollowUpLabels = requiredDocStatus
+    .filter((entry) => entry.needsFollowUp && !renewalTypeSet.has(entry.documentType))
+    .map(
+      (entry) =>
+        MEMBER_DOCUMENT_TYPE_LABELS[entry.documentType as MemberDocumentType] ??
+        entry.documentType,
+    );
+
+  const hasExpiredRenewal = renewalEntries.some((e) => e.displayStatus === "expired");
+  const hasExpiringSoonRenewal = renewalEntries.some(
+    (e) => e.displayStatus === "expiring_soon",
+  );
 
   const isAccountPaused = activationStatus === "paused";
   const isAccountInactive = activationStatus === "inactive";
@@ -346,8 +372,41 @@ export default async function MemberPortalPage({
         </div>
       )}
 
-      {/* Follow-up notice */}
-      {attentionLabels.length > 0 && (
+      {/* Renewal needed notice — expiry-driven */}
+      {renewalLabels.length > 0 && !isAccountInactive && (
+        <div
+          className="rounded-xl border px-5 py-4 space-y-1"
+          style={
+            hasExpiredRenewal
+              ? { borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)" }
+              : { borderColor: "rgba(249,115,22,0.3)", background: "rgba(249,115,22,0.05)" }
+          }
+        >
+          <p
+            className="text-sm font-medium"
+            style={{ color: hasExpiredRenewal ? "#f87171" : "#fb923c" }}
+          >
+            {hasExpiredRenewal
+              ? "Document renewal required"
+              : "Document renewal recommended"}
+          </p>
+          <p className="text-xs" style={{ color: "#94a3b8" }}>
+            {hasExpiredRenewal && hasExpiringSoonRenewal
+              ? "One or more documents have expired or are expiring soon"
+              : hasExpiredRenewal
+                ? `${renewalLabels.length === 1 ? "A document has" : "Documents have"} expired`
+                : `${renewalLabels.length === 1 ? "A document is" : "Documents are"} expiring soon`}
+            :{" "}
+            <span style={{ color: "#e2e8f0" }}>{renewalLabels.join(", ")}</span>.
+          </p>
+          <p className="text-xs" style={{ color: "#64748b" }}>
+            Submit updated documentation using the form below to keep your file current with Adero.
+          </p>
+        </div>
+      )}
+
+      {/* Compliance follow-up notice — staff-requested, not expiry-driven */}
+      {complianceOnlyFollowUpLabels.length > 0 && !isAccountInactive && (
         <div
           className="rounded-xl border px-5 py-4 space-y-1"
           style={{ borderColor: "rgba(249,115,22,0.25)", background: "rgba(249,115,22,0.04)" }}
@@ -356,9 +415,9 @@ export default async function MemberPortalPage({
             Documentation follow-up requested
           </p>
           <p className="text-xs" style={{ color: "#94a3b8" }}>
-            The following document{attentionLabels.length > 1 ? "s require" : " requires"} your
-            attention:{" "}
-            <span style={{ color: "#cbd5e1" }}>{attentionLabels.join(", ")}</span>.
+            The following document
+            {complianceOnlyFollowUpLabels.length > 1 ? "s require" : " requires"} your attention:{" "}
+            <span style={{ color: "#cbd5e1" }}>{complianceOnlyFollowUpLabels.join(", ")}</span>.
           </p>
           <p className="text-xs" style={{ color: "#64748b" }}>
             Use the submission form below to let your Adero representative know what you are
@@ -498,6 +557,16 @@ export default async function MemberPortalPage({
                   </div>
                 </div>
 
+                {/* Per-document renewal guidance */}
+                {(entry.displayStatus === "expired" || entry.displayStatus === "expiring_soon") &&
+                  !subStatus && (
+                    <p className="mt-2 pl-8 text-[11px]" style={{ color: "#64748b" }}>
+                      {entry.displayStatus === "expired"
+                        ? "Renewal required — please submit updated documentation."
+                        : "Renewal recommended — submit updated documentation before this document expires."}
+                    </p>
+                  )}
+
                 {/* Per-document submission status */}
                 {subStatus && (
                   <div className="mt-2.5 flex items-center gap-1.5 pl-8">
@@ -601,7 +670,9 @@ export default async function MemberPortalPage({
               className="text-xs font-semibold uppercase tracking-[3px]"
               style={{ color: "#475569" }}
             >
-              Submit a Document Update
+              {renewalLabels.length > 0
+                ? "Submit a Document Renewal or Update"
+                : "Submit a Document Update"}
             </h2>
             <p className="mt-2 text-xs" style={{ color: "#475569" }}>
               Let your Adero representative know what you are submitting. Include any reference

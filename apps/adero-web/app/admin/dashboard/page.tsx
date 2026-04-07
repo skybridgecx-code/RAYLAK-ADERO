@@ -527,9 +527,14 @@ export default async function NetworkDashboardPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <SectionHeader>Document Health</SectionHeader>
-          <Link href="/admin/profiles/documents" className="text-xs" style={{ color: "#475569" }}>
-            Document queue →
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/admin/renewals" className="text-xs" style={{ color: membersWithExpiredDocs > 0 || membersWithExpiringSoon > 0 ? "#fb923c" : "#475569" }}>
+              Renewal queue →
+            </Link>
+            <Link href="/admin/profiles/documents" className="text-xs" style={{ color: "#475569" }}>
+              Document queue →
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
@@ -778,6 +783,7 @@ export default async function NetworkDashboardPage() {
             { label: "Company profiles", href: "/admin/profiles/companies" },
             { label: "Operator profiles", href: "/admin/profiles/operators" },
             { label: "Document monitoring", href: "/admin/profiles/documents" },
+            { label: "Renewal queue", href: "/admin/renewals" },
             { label: "Compliance dashboard", href: "/admin/compliance" },
             {
               label: "Escalated issues",

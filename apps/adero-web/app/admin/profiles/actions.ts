@@ -3,6 +3,7 @@
 import {
   aderoAuditLogs,
   aderoCompanyProfiles,
+  aderoDocumentComplianceNotifications,
   aderoMemberDocuments,
   aderoOperatorProfiles,
   db,
@@ -10,6 +11,8 @@ import {
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
+  MEMBER_DOCUMENT_COMPLIANCE_ACTIONS,
+  MEMBER_DOCUMENT_COMPLIANCE_ACTION_LABELS,
   MEMBER_DOCUMENT_STATUSES,
   MEMBER_DOCUMENT_STATUS_LABELS,
   MEMBER_DOCUMENT_TYPES,
@@ -26,6 +29,7 @@ export type ProfileActionState = {
 };
 
 export type DocumentActionState = ProfileActionState;
+export type ComplianceActionState = ProfileActionState;
 
 const CompanyProfileInput = z.object({
   id: z.string().uuid(),
@@ -89,6 +93,16 @@ const MemberDocumentInput = z.object({
   actorName: z.string().trim().optional(),
 });
 
+const MemberDocumentComplianceInput = z.object({
+  memberType: z.enum(["company", "operator"]),
+  profileId: z.string().uuid(),
+  documentId: z.string().uuid().optional(),
+  documentType: z.enum(MEMBER_DOCUMENT_TYPES),
+  actionType: z.enum(MEMBER_DOCUMENT_COMPLIANCE_ACTIONS),
+  notes: z.string().trim().optional(),
+  actorName: z.string().trim().optional(),
+});
+
 function emptyToNull(value: string | null | undefined) {
   return value?.trim() ? value.trim() : null;
 }
@@ -132,6 +146,7 @@ function revalidateMemberDocumentPaths(memberType: "company" | "operator", profi
   revalidatePath("/admin/profiles");
   revalidatePath("/admin/profiles/companies");
   revalidatePath("/admin/profiles/operators");
+  revalidatePath("/admin/profiles/documents");
   revalidatePath(
     memberType === "company"
       ? `/admin/profiles/companies/${profileId}`
@@ -448,6 +463,132 @@ export async function createMemberDocument(
     console.error("[adero] createMemberDocument failed:", err);
     return {
       error: "Document save failed. Please try again.",
+      fieldErrors: {},
+      saved: false,
+    };
+  }
+
+  revalidateMemberDocumentPaths(data.memberType, data.profileId);
+  return { error: null, fieldErrors: {}, saved: true };
+}
+
+export async function createMemberDocumentComplianceAction(
+  _prev: ComplianceActionState,
+  formData: FormData,
+): Promise<ComplianceActionState> {
+  const result = MemberDocumentComplianceInput.safeParse({
+    memberType: formData.get("memberType"),
+    profileId: formData.get("profileId"),
+    documentId: formData.get("documentId") ?? undefined,
+    documentType: formData.get("documentType"),
+    actionType: formData.get("actionType"),
+    notes: formData.get("notes") ?? undefined,
+    actorName: formData.get("actorName") ?? undefined,
+  });
+
+  if (!result.success) {
+    return {
+      error: "Please fix the highlighted fields.",
+      fieldErrors: result.error.flatten().fieldErrors,
+      saved: false,
+    };
+  }
+
+  const data = result.data;
+  const now = new Date();
+
+  try {
+    await db.transaction(async (tx) => {
+      const member =
+        data.memberType === "company"
+          ? await (async () => {
+              const [profile] = await tx
+                .select()
+                .from(aderoCompanyProfiles)
+                .where(eq(aderoCompanyProfiles.id, data.profileId));
+
+              if (!profile) throw new Error("Company profile not found.");
+
+              return {
+                applicationId: profile.applicationId,
+                companyProfileId: profile.id,
+                operatorProfileId: null,
+                memberName: profile.companyName,
+              };
+            })()
+          : await (async () => {
+              const [profile] = await tx
+                .select()
+                .from(aderoOperatorProfiles)
+                .where(eq(aderoOperatorProfiles.id, data.profileId));
+
+              if (!profile) throw new Error("Operator profile not found.");
+
+              return {
+                applicationId: profile.applicationId,
+                companyProfileId: null,
+                operatorProfileId: profile.id,
+                memberName: profile.fullName,
+              };
+            })();
+
+      let documentId: string | null = null;
+      if (data.documentId) {
+        const [document] = await tx
+          .select()
+          .from(aderoMemberDocuments)
+          .where(eq(aderoMemberDocuments.id, data.documentId));
+
+        if (!document) throw new Error("Document not found.");
+        if (
+          document.memberType !== data.memberType ||
+          document.documentType !== data.documentType ||
+          document.companyProfileId !== member.companyProfileId ||
+          document.operatorProfileId !== member.operatorProfileId
+        ) {
+          throw new Error("Document does not belong to this compliance issue.");
+        }
+
+        documentId = document.id;
+      }
+
+      const actionLabel = MEMBER_DOCUMENT_COMPLIANCE_ACTION_LABELS[data.actionType];
+      const documentLabel = documentTypeLabel(data.documentType);
+      const title = `${actionLabel}: ${documentLabel}`;
+      const body = `${actionLabel} recorded for ${member.memberName}.`;
+      const notes = emptyToNull(data.notes);
+
+      await tx.insert(aderoDocumentComplianceNotifications).values({
+        memberType: data.memberType,
+        companyProfileId: member.companyProfileId,
+        operatorProfileId: member.operatorProfileId,
+        documentId,
+        documentType: data.documentType,
+        actionType: data.actionType,
+        title,
+        body,
+        notes,
+        actorName: actorOrSystem(data.actorName),
+        createdAt: now,
+      });
+
+      await tx.insert(aderoAuditLogs).values({
+        entityType: `${data.memberType}_document_compliance`,
+        entityId: documentId ?? data.profileId,
+        applicationId: member.applicationId,
+        companyProfileId: member.companyProfileId,
+        operatorProfileId: member.operatorProfileId,
+        action: `document_compliance_${data.actionType}`,
+        actorName: actorOrSystem(data.actorName),
+        summary: `${actionLabel} recorded for ${documentLabel.toLowerCase()} on ${member.memberName}.`,
+        details: notes ? `Notes: ${notes}` : null,
+        createdAt: now,
+      });
+    });
+  } catch (err) {
+    console.error("[adero] createMemberDocumentComplianceAction failed:", err);
+    return {
+      error: "Compliance action failed. Please try again.",
       fieldErrors: {},
       saved: false,
     };

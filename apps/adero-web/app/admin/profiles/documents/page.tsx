@@ -1,19 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { desc } from "drizzle-orm";
 import {
   aderoCompanyProfiles,
+  aderoDocumentComplianceNotifications,
   aderoMemberDocuments,
   aderoOperatorProfiles,
   db,
   type AderoMemberDocument,
 } from "@raylak/db";
+import { StatusBadge } from "~/components/status-badge";
+import {
+  getCurrentComplianceAction,
+  getLatestComplianceNotification,
+} from "~/lib/document-compliance";
 import {
   daysUntilExpiration,
   getDocumentDisplayStatus,
   getMemberDocumentSummary,
   type AderoMemberType,
 } from "~/lib/document-monitoring";
-import { MEMBER_DOCUMENT_TYPE_LABELS } from "~/lib/validators";
+import { MEMBER_DOCUMENT_TYPE_LABELS, type MemberDocumentType } from "~/lib/validators";
+import { DocumentComplianceActionForm } from "../document-compliance-action-form";
 
 export const metadata: Metadata = {
   title: "Document Monitoring - Adero Admin",
@@ -25,6 +33,7 @@ export const dynamic = "force-dynamic";
 type MemberRef = {
   href: string;
   memberType: AderoMemberType;
+  profileId: string;
   name: string;
   subtitle: string;
 };
@@ -35,6 +44,16 @@ function fmtDate(value: string | null) {
     month: "short",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+function fmtTimestamp(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -51,11 +70,17 @@ function getMemberRef(document: AderoMemberDocument, members: Map<string, Member
 }
 
 export default async function DocumentMonitoringPage() {
-  const [companyProfiles, operatorProfiles, documents] = await Promise.all([
-    db.select().from(aderoCompanyProfiles),
-    db.select().from(aderoOperatorProfiles),
-    db.select().from(aderoMemberDocuments),
-  ]);
+  const [companyProfiles, operatorProfiles, documents, complianceNotifications] = await Promise.all(
+    [
+      db.select().from(aderoCompanyProfiles),
+      db.select().from(aderoOperatorProfiles),
+      db.select().from(aderoMemberDocuments),
+      db
+        .select()
+        .from(aderoDocumentComplianceNotifications)
+        .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
+    ],
+  );
 
   const memberRefs = new Map<string, MemberRef>();
   const companyDocumentMap = new Map<string, AderoMemberDocument[]>();
@@ -65,6 +90,7 @@ export default async function DocumentMonitoringPage() {
     memberRefs.set(profile.id, {
       href: `/admin/profiles/companies/${profile.id}`,
       memberType: "company",
+      profileId: profile.id,
       name: profile.companyName,
       subtitle: `${profile.contactName} · ${profile.email}`,
     });
@@ -74,6 +100,7 @@ export default async function DocumentMonitoringPage() {
     memberRefs.set(profile.id, {
       href: `/admin/profiles/operators/${profile.id}`,
       memberType: "operator",
+      profileId: profile.id,
       name: profile.fullName,
       subtitle: [profile.city, profile.state].filter(Boolean).join(", ") || profile.email,
     });
@@ -94,37 +121,32 @@ export default async function DocumentMonitoringPage() {
   }
 
   const missingRequired = [
-    ...companyProfiles
-      .map((profile) => {
-        const summary = getMemberDocumentSummary(
-          "company",
-          companyDocumentMap.get(profile.id) ?? [],
-        );
-        return {
-          href: `/admin/profiles/companies/${profile.id}`,
-          memberType: "company" as const,
-          name: profile.companyName,
-          subtitle: `${profile.contactName} · ${profile.email}`,
-          missingTypes: summary.missingRequiredTypes,
-        };
-      })
-      .filter((entry) => entry.missingTypes.length > 0),
-    ...operatorProfiles
-      .map((profile) => {
-        const summary = getMemberDocumentSummary(
-          "operator",
-          operatorDocumentMap.get(profile.id) ?? [],
-        );
-        return {
-          href: `/admin/profiles/operators/${profile.id}`,
-          memberType: "operator" as const,
-          name: profile.fullName,
-          subtitle: [profile.city, profile.state].filter(Boolean).join(", ") || profile.email,
-          missingTypes: summary.missingRequiredTypes,
-        };
-      })
-      .filter((entry) => entry.missingTypes.length > 0),
-  ].sort((a, b) => b.missingTypes.length - a.missingTypes.length || a.name.localeCompare(b.name));
+    ...companyProfiles.flatMap((profile) => {
+      const summary = getMemberDocumentSummary("company", companyDocumentMap.get(profile.id) ?? []);
+      return summary.missingRequiredTypes.map((documentType) => ({
+        href: `/admin/profiles/companies/${profile.id}`,
+        memberType: "company" as const,
+        profileId: profile.id,
+        name: profile.companyName,
+        subtitle: `${profile.contactName} · ${profile.email}`,
+        documentType,
+      }));
+    }),
+    ...operatorProfiles.flatMap((profile) => {
+      const summary = getMemberDocumentSummary(
+        "operator",
+        operatorDocumentMap.get(profile.id) ?? [],
+      );
+      return summary.missingRequiredTypes.map((documentType) => ({
+        href: `/admin/profiles/operators/${profile.id}`,
+        memberType: "operator" as const,
+        profileId: profile.id,
+        name: profile.fullName,
+        subtitle: [profile.city, profile.state].filter(Boolean).join(", ") || profile.email,
+        documentType,
+      }));
+    }),
+  ].sort((a, b) => a.name.localeCompare(b.name) || a.documentType.localeCompare(b.documentType));
 
   const expiringSoon = documents
     .map((document) => {
@@ -178,7 +200,8 @@ export default async function DocumentMonitoringPage() {
           Document Monitoring
         </h1>
         <p className="mt-1 text-sm" style={{ color: "#475569" }}>
-          Requirement gaps and renewal issues across activated Adero members.
+          Requirement gaps, renewal issues, and internal compliance follow-up across activated Adero
+          members.
         </p>
       </div>
 
@@ -253,11 +276,17 @@ export default async function DocumentMonitoringPage() {
           >
             {missingRequired.map((entry) => {
               const pill = memberPill(entry.memberType);
+              const currentComplianceAction = getCurrentComplianceAction(
+                complianceNotifications,
+                entry.memberType,
+                entry.profileId,
+                entry.documentType as MemberDocumentType,
+              );
+
               return (
-                <Link
+                <div
                   key={`${entry.memberType}-${entry.href}`}
-                  href={entry.href}
-                  className="flex items-start gap-4 border-b px-5 py-4 transition-colors last:border-b-0 hover:bg-white/[0.03]"
+                  className="flex items-start gap-4 border-b px-5 py-4 last:border-b-0"
                   style={{
                     borderColor: "rgba(255,255,255,0.05)",
                     background: "rgba(255,255,255,0.01)",
@@ -270,21 +299,38 @@ export default async function DocumentMonitoringPage() {
                     {pill.label}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
-                      {entry.name}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={entry.href}
+                        className="text-sm font-medium"
+                        style={{ color: "#f1f5f9" }}
+                      >
+                        {entry.name}
+                      </Link>
+                      {currentComplianceAction ? (
+                        <StatusBadge status={currentComplianceAction} />
+                      ) : null}
+                    </div>
                     <p className="mt-0.5 text-xs" style={{ color: "#475569" }}>
                       {entry.subtitle}
                     </p>
                     <p className="mt-2 text-xs" style={{ color: "#64748b" }}>
-                      Missing:{" "}
-                      {entry.missingTypes
-                        .map((type) => MEMBER_DOCUMENT_TYPE_LABELS[type])
-                        .join(", ")}
+                      Missing: {MEMBER_DOCUMENT_TYPE_LABELS[entry.documentType]}
                     </p>
+                    <div className="mt-3">
+                      <DocumentComplianceActionForm
+                        memberType={entry.memberType}
+                        profileId={entry.profileId}
+                        documentType={entry.documentType as MemberDocumentType}
+                        notifications={complianceNotifications}
+                        compact
+                      />
+                    </div>
                   </div>
-                  <span style={{ color: "#334155" }}>&rsaquo;</span>
-                </Link>
+                  <Link href={entry.href} style={{ color: "#334155" }}>
+                    &rsaquo;
+                  </Link>
+                </div>
               );
             })}
           </div>
@@ -306,11 +352,17 @@ export default async function DocumentMonitoringPage() {
           >
             {expiringSoon.map(({ document, member, daysRemaining }) => {
               const pill = memberPill(member.memberType);
+              const currentComplianceAction = getCurrentComplianceAction(
+                complianceNotifications,
+                member.memberType,
+                member.profileId,
+                document.documentType as MemberDocumentType,
+              );
+
               return (
-                <Link
+                <div
                   key={document.id}
-                  href={member.href}
-                  className="flex items-start gap-4 border-b px-5 py-4 transition-colors last:border-b-0 hover:bg-white/[0.03]"
+                  className="flex items-start gap-4 border-b px-5 py-4 last:border-b-0"
                   style={{
                     borderColor: "rgba(255,255,255,0.05)",
                     background: "rgba(255,255,255,0.01)",
@@ -323,16 +375,21 @@ export default async function DocumentMonitoringPage() {
                     {pill.label}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
-                      {document.title}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={member.href}
+                        className="text-sm font-medium"
+                        style={{ color: "#f1f5f9" }}
+                      >
+                        {document.title}
+                      </Link>
+                      {currentComplianceAction ? (
+                        <StatusBadge status={currentComplianceAction} />
+                      ) : null}
+                    </div>
                     <p className="mt-0.5 text-xs" style={{ color: "#475569" }}>
                       {member.name} ·{" "}
-                      {
-                        MEMBER_DOCUMENT_TYPE_LABELS[
-                          document.documentType as keyof typeof MEMBER_DOCUMENT_TYPE_LABELS
-                        ]
-                      }
+                      {MEMBER_DOCUMENT_TYPE_LABELS[document.documentType as MemberDocumentType]}
                     </p>
                     <p className="mt-2 text-xs" style={{ color: "#64748b" }}>
                       Expires {fmtDate(document.expirationDate)}
@@ -340,9 +397,21 @@ export default async function DocumentMonitoringPage() {
                         ? ` · ${daysRemaining} days remaining`
                         : ""}
                     </p>
+                    <div className="mt-3">
+                      <DocumentComplianceActionForm
+                        memberType={member.memberType}
+                        profileId={member.profileId}
+                        documentType={document.documentType as MemberDocumentType}
+                        documentId={document.id}
+                        notifications={complianceNotifications}
+                        compact
+                      />
+                    </div>
                   </div>
-                  <span style={{ color: "#334155" }}>&rsaquo;</span>
-                </Link>
+                  <Link href={member.href} style={{ color: "#334155" }}>
+                    &rsaquo;
+                  </Link>
+                </div>
               );
             })}
           </div>
@@ -364,11 +433,17 @@ export default async function DocumentMonitoringPage() {
           >
             {expired.map(({ document, member, daysRemaining }) => {
               const pill = memberPill(member.memberType);
+              const currentComplianceAction = getCurrentComplianceAction(
+                complianceNotifications,
+                member.memberType,
+                member.profileId,
+                document.documentType as MemberDocumentType,
+              );
+
               return (
-                <Link
+                <div
                   key={document.id}
-                  href={member.href}
-                  className="flex items-start gap-4 border-b px-5 py-4 transition-colors last:border-b-0 hover:bg-white/[0.03]"
+                  className="flex items-start gap-4 border-b px-5 py-4 last:border-b-0"
                   style={{
                     borderColor: "rgba(255,255,255,0.05)",
                     background: "rgba(255,255,255,0.01)",
@@ -381,22 +456,103 @@ export default async function DocumentMonitoringPage() {
                     {pill.label}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
-                      {document.title}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={member.href}
+                        className="text-sm font-medium"
+                        style={{ color: "#f1f5f9" }}
+                      >
+                        {document.title}
+                      </Link>
+                      {currentComplianceAction ? (
+                        <StatusBadge status={currentComplianceAction} />
+                      ) : null}
+                    </div>
                     <p className="mt-0.5 text-xs" style={{ color: "#475569" }}>
                       {member.name} ·{" "}
-                      {
-                        MEMBER_DOCUMENT_TYPE_LABELS[
-                          document.documentType as keyof typeof MEMBER_DOCUMENT_TYPE_LABELS
-                        ]
-                      }
+                      {MEMBER_DOCUMENT_TYPE_LABELS[document.documentType as MemberDocumentType]}
                     </p>
                     <p className="mt-2 text-xs" style={{ color: "#64748b" }}>
                       Expired {fmtDate(document.expirationDate)}
                       {typeof daysRemaining === "number"
                         ? ` · ${Math.abs(daysRemaining)} days overdue`
                         : ""}
+                    </p>
+                    <div className="mt-3">
+                      <DocumentComplianceActionForm
+                        memberType={member.memberType}
+                        profileId={member.profileId}
+                        documentType={document.documentType as MemberDocumentType}
+                        documentId={document.id}
+                        notifications={complianceNotifications}
+                        compact
+                      />
+                    </div>
+                  </div>
+                  <Link href={member.href} style={{ color: "#334155" }}>
+                    &rsaquo;
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xs font-semibold uppercase tracking-[3px]" style={{ color: "#475569" }}>
+          Recent Compliance Notifications
+        </h2>
+        {complianceNotifications.length === 0 ? (
+          <p className="text-sm" style={{ color: "#334155" }}>
+            No compliance notifications yet.
+          </p>
+        ) : (
+          <div
+            className="overflow-hidden rounded-xl border"
+            style={{ borderColor: "rgba(255,255,255,0.07)" }}
+          >
+            {complianceNotifications.slice(0, 15).map((notification) => {
+              const profileId =
+                notification.memberType === "company"
+                  ? notification.companyProfileId
+                  : notification.operatorProfileId;
+              const href =
+                notification.memberType === "company"
+                  ? `/admin/profiles/companies/${profileId}`
+                  : `/admin/profiles/operators/${profileId}`;
+              const latest = profileId
+                ? getLatestComplianceNotification(
+                    complianceNotifications,
+                    notification.memberType as AderoMemberType,
+                    profileId,
+                    notification.documentType as MemberDocumentType,
+                  )
+                : null;
+
+              return (
+                <Link
+                  key={notification.id}
+                  href={href}
+                  className="flex items-start gap-4 border-b px-5 py-4 transition-colors last:border-b-0 hover:bg-white/[0.03]"
+                  style={{
+                    borderColor: "rgba(255,255,255,0.05)",
+                    background: "rgba(255,255,255,0.01)",
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
+                        {notification.title}
+                      </p>
+                      {latest ? <StatusBadge status={latest.actionType} /> : null}
+                    </div>
+                    <p className="mt-0.5 text-xs" style={{ color: "#475569" }}>
+                      {notification.body ?? "Compliance notification recorded."}
+                    </p>
+                    <p className="mt-1 text-[11px]" style={{ color: "#64748b" }}>
+                      {fmtTimestamp(notification.createdAt)}
+                      {notification.actorName ? ` · ${notification.actorName}` : ""}
                     </p>
                   </div>
                   <span style={{ color: "#334155" }}>&rsaquo;</span>

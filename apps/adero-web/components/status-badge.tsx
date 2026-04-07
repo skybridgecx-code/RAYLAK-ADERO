@@ -1,14 +1,16 @@
 import {
   APPLICATION_STATUS_LABELS,
+  MEMBER_DOCUMENT_COMPLIANCE_ACTION_LABELS,
   MEMBER_DOCUMENT_STATUS_LABELS,
   PROFILE_STATUS_LABELS,
   type ApplicationStatus,
+  type MemberDocumentComplianceAction,
   type MemberDocumentDisplayStatus,
   type ProfileStatus,
 } from "~/lib/validators";
 
 const STATUS_COLORS: Record<
-  ApplicationStatus | ProfileStatus | MemberDocumentDisplayStatus,
+  ApplicationStatus | ProfileStatus | MemberDocumentDisplayStatus | MemberDocumentComplianceAction,
   { bg: string; color: string }
 > = {
   pending: { bg: "rgba(99,102,241,0.15)", color: "#818cf8" }, // indigo — new/unreviewed
@@ -23,15 +25,24 @@ const STATUS_COLORS: Record<
   expiring_soon: { bg: "rgba(249,115,22,0.15)", color: "#fb923c" },
   pending_review: { bg: "rgba(234,179,8,0.15)", color: "#facc15" },
   expired: { bg: "rgba(239,68,68,0.15)", color: "#f87171" },
+  follow_up_needed: { bg: "rgba(239,68,68,0.15)", color: "#f87171" },
+  reminder_sent: { bg: "rgba(249,115,22,0.15)", color: "#fb923c" },
+  exception_noted: { bg: "rgba(99,102,241,0.15)", color: "#818cf8" },
+  resolved: { bg: "rgba(34,197,94,0.2)", color: "#22c55e" },
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const s = status as ApplicationStatus | ProfileStatus | MemberDocumentDisplayStatus;
+  const s = status as
+    | ApplicationStatus
+    | ProfileStatus
+    | MemberDocumentDisplayStatus
+    | MemberDocumentComplianceAction;
   const colors = STATUS_COLORS[s] ?? { bg: "rgba(148,163,184,0.15)", color: "#94a3b8" };
   const label =
     APPLICATION_STATUS_LABELS[s as ApplicationStatus] ??
     PROFILE_STATUS_LABELS[s as ProfileStatus] ??
     MEMBER_DOCUMENT_STATUS_LABELS[s as MemberDocumentDisplayStatus] ??
+    MEMBER_DOCUMENT_COMPLIANCE_ACTION_LABELS[s as MemberDocumentComplianceAction] ??
     status;
 
   return (

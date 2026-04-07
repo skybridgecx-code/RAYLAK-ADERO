@@ -132,6 +132,24 @@ export const MEMBER_DOCUMENT_STATUS_LABELS: Record<MemberDocumentDisplayStatus, 
   rejected: "Rejected",
 };
 
+export const MEMBER_DOCUMENT_COMPLIANCE_ACTIONS = [
+  "follow_up_needed",
+  "reminder_sent",
+  "exception_noted",
+  "resolved",
+] as const;
+export type MemberDocumentComplianceAction = (typeof MEMBER_DOCUMENT_COMPLIANCE_ACTIONS)[number];
+
+export const MEMBER_DOCUMENT_COMPLIANCE_ACTION_LABELS: Record<
+  MemberDocumentComplianceAction,
+  string
+> = {
+  follow_up_needed: "Follow-Up Needed",
+  reminder_sent: "Reminder Sent",
+  exception_noted: "Exception Noted",
+  resolved: "Resolved",
+};
+
 // ─── Shared action state ──────────────────────────────────────────────────────
 
 export interface ApplicationActionState {

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   aderoAuditLogs,
   aderoCompanyApplications,
+  aderoDocumentComplianceNotifications,
   aderoCompanyProfiles,
   aderoMemberDocuments,
   db,
@@ -25,7 +26,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CompanyProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [[row], auditEntries, documents] = await Promise.all([
+  const [[row], auditEntries, documents, complianceNotifications] = await Promise.all([
     db
       .select({
         profile: aderoCompanyProfiles,
@@ -48,6 +49,11 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
       .from(aderoMemberDocuments)
       .where(eq(aderoMemberDocuments.companyProfileId, id))
       .orderBy(desc(aderoMemberDocuments.updatedAt)),
+    db
+      .select()
+      .from(aderoDocumentComplianceNotifications)
+      .where(eq(aderoDocumentComplianceNotifications.companyProfileId, id))
+      .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
   ]);
 
   if (!row) notFound();
@@ -152,7 +158,12 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
             )}
           </section>
 
-          <DocumentTracking documents={documents} memberType="company" profileId={profile.id} />
+          <DocumentTracking
+            documents={documents}
+            complianceNotifications={complianceNotifications}
+            memberType="company"
+            profileId={profile.id}
+          />
 
           <AuditHistory entries={auditEntries} />
         </div>

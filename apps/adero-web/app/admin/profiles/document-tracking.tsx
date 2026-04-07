@@ -1,7 +1,9 @@
 "use client";
 
-import type { AderoMemberDocument } from "@raylak/db";
+import type { AderoDocumentComplianceNotification, AderoMemberDocument } from "@raylak/db";
 import { useActionState } from "react";
+import { StatusBadge } from "~/components/status-badge";
+import { getCurrentComplianceAction } from "~/lib/document-compliance";
 import {
   getDocumentDisplayStatus,
   getMemberDocumentSummary,
@@ -12,9 +14,11 @@ import {
   MEMBER_DOCUMENT_STATUS_LABELS,
   MEMBER_DOCUMENT_TYPES,
   MEMBER_DOCUMENT_TYPE_LABELS,
+  type MemberDocumentType,
   type MemberDocumentDisplayStatus,
 } from "~/lib/validators";
 import { createMemberDocument, type DocumentActionState, updateMemberDocument } from "./actions";
+import { DocumentComplianceActionForm } from "./document-compliance-action-form";
 
 const initialDocumentActionState: DocumentActionState = {
   error: null,
@@ -74,10 +78,14 @@ function DocumentStatusBadge({ status }: { status: MemberDocumentDisplayStatus }
 
 function DocumentSummary({
   memberType,
+  profileId,
   documents,
+  complianceNotifications,
 }: {
   memberType: AderoMemberType;
+  profileId: string;
   documents: AderoMemberDocument[];
+  complianceNotifications: AderoDocumentComplianceNotification[];
 }) {
   const summary = getMemberDocumentSummary(memberType, documents);
 
@@ -158,34 +166,55 @@ function DocumentSummary({
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {summary.requiredDocuments.map(({ documentType, document, displayStatus }) => (
-          <div
-            key={documentType}
-            className="rounded-xl border p-4"
-            style={{
-              borderColor: "rgba(255,255,255,0.07)",
-              background: "rgba(255,255,255,0.02)",
-            }}
-          >
-            <p
-              className="text-xs font-semibold uppercase tracking-[3px]"
-              style={{ color: "#475569" }}
+        {summary.requiredDocuments.map(({ documentType, document, displayStatus }) => {
+          const currentComplianceAction = getCurrentComplianceAction(
+            complianceNotifications,
+            memberType,
+            profileId,
+            documentType as MemberDocumentType,
+          );
+
+          return (
+            <div
+              key={documentType}
+              className="rounded-xl border p-4"
+              style={{
+                borderColor: "rgba(255,255,255,0.07)",
+                background: "rgba(255,255,255,0.02)",
+              }}
             >
-              {MEMBER_DOCUMENT_TYPE_LABELS[documentType]}
-            </p>
-            <div className="mt-3">
-              <DocumentStatusBadge status={displayStatus} />
+              <p
+                className="text-xs font-semibold uppercase tracking-[3px]"
+                style={{ color: "#475569" }}
+              >
+                {MEMBER_DOCUMENT_TYPE_LABELS[documentType]}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <DocumentStatusBadge status={displayStatus} />
+                {currentComplianceAction ? <StatusBadge status={currentComplianceAction} /> : null}
+              </div>
+              <p className="mt-3 text-xs" style={{ color: "#64748b" }}>
+                {document ? document.title : "No tracked record"}
+              </p>
+              <p className="mt-1 text-[11px]" style={{ color: "#475569" }}>
+                {document?.expirationDate
+                  ? `Expires ${fmtDate(document.expirationDate)}`
+                  : "No expiration"}
+              </p>
+              {!document ? (
+                <div className="mt-4">
+                  <DocumentComplianceActionForm
+                    memberType={memberType}
+                    profileId={profileId}
+                    documentType={documentType as MemberDocumentType}
+                    notifications={complianceNotifications}
+                    compact
+                  />
+                </div>
+              ) : null}
             </div>
-            <p className="mt-3 text-xs" style={{ color: "#64748b" }}>
-              {document ? document.title : "No tracked record"}
-            </p>
-            <p className="mt-1 text-[11px]" style={{ color: "#475569" }}>
-              {document?.expirationDate
-                ? `Expires ${fmtDate(document.expirationDate)}`
-                : "No expiration"}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -395,11 +424,13 @@ function ExistingDocumentForm({
   memberType,
   profileId,
   accent,
+  complianceNotifications,
 }: {
   document: AderoMemberDocument;
   memberType: AderoMemberType;
   profileId: string;
   accent: { bg: string; color: string; border: string };
+  complianceNotifications: AderoDocumentComplianceNotification[];
 }) {
   const [state, formAction, isPending] = useActionState(
     updateMemberDocument,
@@ -599,16 +630,26 @@ function ExistingDocumentForm({
           {state.error}
         </p>
       )}
+
+      <DocumentComplianceActionForm
+        memberType={memberType}
+        profileId={profileId}
+        documentType={document.documentType as MemberDocumentType}
+        documentId={document.id}
+        notifications={complianceNotifications}
+      />
     </form>
   );
 }
 
 export function DocumentTracking({
   documents,
+  complianceNotifications,
   memberType,
   profileId,
 }: {
   documents: AderoMemberDocument[];
+  complianceNotifications: AderoDocumentComplianceNotification[];
   memberType: AderoMemberType;
   profileId: string;
 }) {
@@ -628,7 +669,12 @@ export function DocumentTracking({
         </p>
       </div>
 
-      <DocumentSummary memberType={memberType} documents={documents} />
+      <DocumentSummary
+        memberType={memberType}
+        profileId={profileId}
+        documents={documents}
+        complianceNotifications={complianceNotifications}
+      />
 
       <NewDocumentForm memberType={memberType} profileId={profileId} accent={accent} />
 
@@ -645,6 +691,7 @@ export function DocumentTracking({
               memberType={memberType}
               profileId={profileId}
               accent={accent}
+              complianceNotifications={complianceNotifications}
             />
           ))}
         </div>

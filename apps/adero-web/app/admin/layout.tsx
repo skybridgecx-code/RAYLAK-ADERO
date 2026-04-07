@@ -54,7 +54,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Link>
           </nav>
 
-          <div className="ml-auto flex items-center gap-4">
+          <form method="GET" action="/admin/search" className="ml-auto flex items-center gap-2">
+            <input
+              name="q"
+              type="text"
+              placeholder="Search…"
+              autoComplete="off"
+              className="w-40 rounded-md border bg-transparent px-3 py-1.5 text-xs outline-none transition-all placeholder:text-slate-700 focus:w-56 focus:border-indigo-500/50"
+              style={{ borderColor: "rgba(255,255,255,0.08)", color: "#94a3b8" }}
+            />
+          </form>
+
+          <div className="flex items-center gap-4">
             <Link
               href="/"
               className="text-xs transition-colors"

@@ -192,13 +192,22 @@ export default async function SubmissionsInboxPage({
   return (
     <div className="space-y-8">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-light tracking-tight" style={{ color: "#f1f5f9" }}>
-          Submission Inbox
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: "#475569" }}>
-          Portal document submissions from all Adero members.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-light tracking-tight" style={{ color: "#f1f5f9" }}>
+            Submission Inbox
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: "#475569" }}>
+            Portal document submissions from all Adero members.
+          </p>
+        </div>
+        <Link
+          href="/admin/submissions/integrity"
+          className="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+          style={{ borderColor: "rgba(255,255,255,0.1)", color: "#64748b" }}
+        >
+          Chain health →
+        </Link>
       </div>
 
       {/* Summary cards */}

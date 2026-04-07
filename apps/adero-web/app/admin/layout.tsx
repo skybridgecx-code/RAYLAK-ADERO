@@ -59,6 +59,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             >
               Submissions
             </Link>
+            <Link
+              href="/admin/submissions/integrity"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Chain Health
+            </Link>
           </nav>
 
           <form method="GET" action="/admin/search" className="ml-auto flex items-center gap-2">

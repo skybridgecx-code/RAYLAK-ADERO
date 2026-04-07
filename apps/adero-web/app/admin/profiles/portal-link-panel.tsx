@@ -27,6 +27,7 @@ const EVENT_LABELS: Record<string, string> = {
   portal_link_copied: "Link copied",
   portal_link_shared: "Marked as shared",
   portal_link_emailed: "Emailed to member",
+  renewal_outreach_emailed: "Renewal outreach sent",
   portal_token_rotated: "Token rotated",
   portal_token_expired: "Token expired",
 };

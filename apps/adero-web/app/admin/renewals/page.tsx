@@ -8,6 +8,7 @@ import {
 } from "@raylak/db";
 import { daysUntilExpiration, getDocumentDisplayStatus } from "~/lib/document-monitoring";
 import { MEMBER_DOCUMENT_TYPE_LABELS, type MemberDocumentType } from "~/lib/validators";
+import { RenewalOutreachButton } from "./renewal-outreach-button";
 
 export const metadata: Metadata = {
   title: "Renewal Queue - Adero Admin",
@@ -15,6 +16,29 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+type DocRenewalEntry = {
+  documentType: string;
+  documentTitle: string;
+  displayStatus: "expired" | "expiring_soon";
+  expirationDate: string;
+  daysRemaining: number;
+};
+
+type MemberRenewalGroup = {
+  memberType: "company" | "operator";
+  profileId: string;
+  memberName: string;
+  memberEmail: string;
+  portalToken: string;
+  isTokenExpired: boolean;
+  expiredDocs: DocRenewalEntry[];
+  expiringSoonDocs: DocRenewalEntry[];
+  /** Most urgent days-remaining value for sort ordering. */
+  urgencyScore: number;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,85 +51,128 @@ function fmtDate(value: string) {
 }
 
 function docLabel(documentType: string) {
-  return (
-    MEMBER_DOCUMENT_TYPE_LABELS[documentType as MemberDocumentType] ?? documentType
-  );
+  return MEMBER_DOCUMENT_TYPE_LABELS[documentType as MemberDocumentType] ?? documentType;
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function RenewalQueuePage() {
-  // Load all member documents and both profile tables in parallel
+  const now = new Date();
+
   const [allDocuments, companyProfiles, operatorProfiles] = await Promise.all([
     db.select().from(aderoMemberDocuments),
     db
-      .select({ id: aderoCompanyProfiles.id, companyName: aderoCompanyProfiles.companyName })
+      .select({
+        id: aderoCompanyProfiles.id,
+        companyName: aderoCompanyProfiles.companyName,
+        email: aderoCompanyProfiles.email,
+        portalToken: aderoCompanyProfiles.portalToken,
+        portalTokenExpiresAt: aderoCompanyProfiles.portalTokenExpiresAt,
+      })
       .from(aderoCompanyProfiles),
     db
-      .select({ id: aderoOperatorProfiles.id, fullName: aderoOperatorProfiles.fullName })
+      .select({
+        id: aderoOperatorProfiles.id,
+        fullName: aderoOperatorProfiles.fullName,
+        email: aderoOperatorProfiles.email,
+        portalToken: aderoOperatorProfiles.portalToken,
+        portalTokenExpiresAt: aderoOperatorProfiles.portalTokenExpiresAt,
+      })
       .from(aderoOperatorProfiles),
   ]);
 
-  const companyNameById = new Map(companyProfiles.map((p) => [p.id, p.companyName]));
-  const operatorNameById = new Map(operatorProfiles.map((p) => [p.id, p.fullName]));
+  // ── Build member lookup maps ───────────────────────────────────────────────
+  const companyById = new Map(
+    companyProfiles.map((p) => [
+      p.id,
+      {
+        memberName: p.companyName,
+        email: p.email,
+        portalToken: p.portalToken,
+        isTokenExpired: p.portalTokenExpiresAt !== null && p.portalTokenExpiresAt <= now,
+      },
+    ]),
+  );
+  const operatorById = new Map(
+    operatorProfiles.map((p) => [
+      p.id,
+      {
+        memberName: p.fullName,
+        email: p.email,
+        portalToken: p.portalToken,
+        isTokenExpired: p.portalTokenExpiresAt !== null && p.portalTokenExpiresAt <= now,
+      },
+    ]),
+  );
 
-  // ── Compute renewal-needed rows ───────────────────────────────────────────
-  type RenewalRow = {
-    documentId: string;
-    memberType: "company" | "operator";
-    profileId: string;
-    memberName: string;
-    documentType: string;
-    documentTitle: string;
-    displayStatus: "expired" | "expiring_soon";
-    expirationDate: string;
-    daysRemaining: number;
-  };
-
-  const renewalRows: RenewalRow[] = [];
+  // ── Group renewal-needed documents by member ───────────────────────────────
+  const groupMap = new Map<string, MemberRenewalGroup>();
 
   for (const doc of allDocuments) {
-    const displayStatus = getDocumentDisplayStatus(doc);
+    const displayStatus = getDocumentDisplayStatus(doc, now);
     if (displayStatus !== "expired" && displayStatus !== "expiring_soon") continue;
     if (!doc.expirationDate) continue;
 
     const memberType = doc.memberType as "company" | "operator";
     const profileId =
-      memberType === "company"
-        ? (doc.companyProfileId ?? null)
-        : (doc.operatorProfileId ?? null);
+      memberType === "company" ? (doc.companyProfileId ?? null) : (doc.operatorProfileId ?? null);
     if (!profileId) continue;
 
-    const memberName =
-      memberType === "company"
-        ? (companyNameById.get(profileId) ?? "Unknown company")
-        : (operatorNameById.get(profileId) ?? "Unknown operator");
+    const profile =
+      memberType === "company" ? companyById.get(profileId) : operatorById.get(profileId);
+    if (!profile) continue;
 
-    const daysRemaining = daysUntilExpiration(doc.expirationDate);
+    const key = `${memberType}:${profileId}`;
+    const daysRemaining = daysUntilExpiration(doc.expirationDate, now);
 
-    renewalRows.push({
-      documentId: doc.id,
-      memberType,
-      profileId,
-      memberName,
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        memberType,
+        profileId,
+        memberName: profile.memberName,
+        memberEmail: profile.email,
+        portalToken: profile.portalToken,
+        isTokenExpired: profile.isTokenExpired,
+        expiredDocs: [],
+        expiringSoonDocs: [],
+        urgencyScore: daysRemaining,
+      });
+    }
+
+    const group = groupMap.get(key)!;
+
+    const entry: DocRenewalEntry = {
       documentType: doc.documentType,
       documentTitle: doc.title,
       displayStatus,
       expirationDate: doc.expirationDate,
       daysRemaining,
-    });
+    };
+
+    if (displayStatus === "expired") {
+      group.expiredDocs.push(entry);
+      // Most overdue (most negative) = highest urgency
+      if (daysRemaining < group.urgencyScore) group.urgencyScore = daysRemaining;
+    } else {
+      group.expiringSoonDocs.push(entry);
+      if (daysRemaining < group.urgencyScore) group.urgencyScore = daysRemaining;
+    }
   }
 
-  // Sort: expired first (most overdue at top), then expiring soon (soonest first)
-  renewalRows.sort((a, b) => {
-    if (a.displayStatus !== b.displayStatus) {
-      return a.displayStatus === "expired" ? -1 : 1;
-    }
-    return a.daysRemaining - b.daysRemaining;
-  });
+  // Sort each group's doc lists by urgency
+  for (const group of groupMap.values()) {
+    group.expiredDocs.sort((a, b) => a.daysRemaining - b.daysRemaining);
+    group.expiringSoonDocs.sort((a, b) => a.daysRemaining - b.daysRemaining);
+  }
 
-  const expiredRows = renewalRows.filter((r) => r.displayStatus === "expired");
-  const expiringSoonRows = renewalRows.filter((r) => r.displayStatus === "expiring_soon");
+  // Separate and sort groups: expired members first (by urgencyScore asc), then expiring-soon
+  const allGroups = [...groupMap.values()].sort((a, b) => a.urgencyScore - b.urgencyScore);
+  const expiredGroups = allGroups.filter((g) => g.expiredDocs.length > 0);
+  const expiringSoonGroups = allGroups.filter((g) => g.expiredDocs.length === 0);
+
+  const totalExpiredDocs = allGroups.reduce((s, g) => s + g.expiredDocs.length, 0);
+  const totalExpiringSoonDocs = allGroups.reduce((s, g) => s + g.expiringSoonDocs.length, 0);
+  const totalMembers = allGroups.length;
 
   return (
     <div className="space-y-8">
@@ -115,7 +182,8 @@ export default async function RenewalQueuePage() {
           Renewal Queue
         </h1>
         <p className="mt-1 text-sm" style={{ color: "#475569" }}>
-          Members with expired or expiring documents that may require renewal outreach.
+          Members with expired or expiring documents. Use the outreach buttons to send renewal
+          emails directly from here.
         </p>
       </div>
 
@@ -123,22 +191,22 @@ export default async function RenewalQueuePage() {
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           {
-            label: "Expired",
-            value: expiredRows.length,
-            color: expiredRows.length > 0 ? "#f87171" : "#334155",
+            label: "Members Affected",
+            value: totalMembers,
+            color: totalMembers > 0 ? "#facc15" : "#334155",
+            description: "Members with at least one renewal need",
+          },
+          {
+            label: "Expired Documents",
+            value: totalExpiredDocs,
+            color: totalExpiredDocs > 0 ? "#f87171" : "#334155",
             description: "Documents past their expiration date",
           },
           {
-            label: "Expiring Soon",
-            value: expiringSoonRows.length,
-            color: expiringSoonRows.length > 0 ? "#fb923c" : "#334155",
+            label: "Expiring Within 30 Days",
+            value: totalExpiringSoonDocs,
+            color: totalExpiringSoonDocs > 0 ? "#fb923c" : "#334155",
             description: "Documents expiring within 30 days",
-          },
-          {
-            label: "Total",
-            value: renewalRows.length,
-            color: renewalRows.length > 0 ? "#facc15" : "#334155",
-            description: "Documents requiring renewal attention",
           },
         ].map(({ label, value, color, description }) => (
           <div
@@ -162,7 +230,7 @@ export default async function RenewalQueuePage() {
         ))}
       </div>
 
-      {renewalRows.length === 0 && (
+      {totalMembers === 0 && (
         <div
           className="rounded-xl border px-5 py-10 text-center"
           style={{ borderColor: "rgba(34,197,94,0.2)", background: "rgba(34,197,94,0.03)" }}
@@ -176,163 +244,171 @@ export default async function RenewalQueuePage() {
         </div>
       )}
 
-      {/* ── Expired documents ─────────────────────────────────────────────── */}
-      {expiredRows.length > 0 && (
+      {/* ── Members with expired documents ──────────────────────────────────── */}
+      {expiredGroups.length > 0 && (
         <section className="space-y-4">
           <div>
             <h2 className="text-base font-medium" style={{ color: "#e2e8f0" }}>
-              Expired Documents
+              Members with Expired Documents
             </h2>
             <p className="mt-1 text-xs" style={{ color: "#475569" }}>
-              These documents are past their expiration date. Members should be contacted for
-              renewal.
+              Documents are past their expiration date. Renewal is required.
             </p>
           </div>
-
-          <div
-            className="overflow-hidden rounded-xl border divide-y"
-            style={{
-              borderColor: "rgba(239,68,68,0.2)",
-              background: "rgba(239,68,68,0.02)",
-            }}
-          >
-            {expiredRows.map((row) => (
-              <RenewalRow key={row.documentId} row={row} />
+          <div className="space-y-3">
+            {expiredGroups.map((group) => (
+              <MemberRenewalCard key={`${group.memberType}:${group.profileId}`} group={group} />
             ))}
           </div>
         </section>
       )}
 
-      {/* ── Expiring soon documents ────────────────────────────────────────── */}
-      {expiringSoonRows.length > 0 && (
+      {/* ── Members with only expiring-soon documents ────────────────────────── */}
+      {expiringSoonGroups.length > 0 && (
         <section className="space-y-4">
           <div>
             <h2 className="text-base font-medium" style={{ color: "#e2e8f0" }}>
-              Expiring Within 30 Days
+              Members with Expiring Documents
             </h2>
             <p className="mt-1 text-xs" style={{ color: "#475569" }}>
-              These documents will expire within 30 days. Proactive renewal outreach is
-              recommended.
+              Documents expiring within 30 days. Proactive renewal outreach recommended.
             </p>
           </div>
-
-          <div
-            className="overflow-hidden rounded-xl border divide-y"
-            style={{
-              borderColor: "rgba(249,115,22,0.2)",
-              background: "rgba(249,115,22,0.02)",
-            }}
-          >
-            {expiringSoonRows.map((row) => (
-              <RenewalRow key={row.documentId} row={row} />
+          <div className="space-y-3">
+            {expiringSoonGroups.map((group) => (
+              <MemberRenewalCard key={`${group.memberType}:${group.profileId}`} group={group} />
             ))}
           </div>
         </section>
       )}
-
-      <p className="text-xs" style={{ color: "#334155" }}>
-        Use member profile pages to log compliance actions or send the portal link for renewal
-        submissions.
-      </p>
     </div>
   );
 }
 
-// ─── Row component ─────────────────────────────────────────────────────────────
+// ─── Member renewal card ───────────────────────────────────────────────────────
 
-function RenewalRow({
-  row,
-}: {
-  row: {
-    documentId: string;
-    memberType: "company" | "operator";
-    profileId: string;
-    memberName: string;
-    documentType: string;
-    documentTitle: string;
-    displayStatus: "expired" | "expiring_soon";
-    expirationDate: string;
-    daysRemaining: number;
-  };
-}) {
-  const isExpired = row.displayStatus === "expired";
+function MemberRenewalCard({ group }: { group: MemberRenewalGroup }) {
   const profileHref =
-    row.memberType === "company"
-      ? `/admin/profiles/companies/${row.profileId}`
-      : `/admin/profiles/operators/${row.profileId}`;
+    group.memberType === "company"
+      ? `/admin/profiles/companies/${group.profileId}`
+      : `/admin/profiles/operators/${group.profileId}`;
 
-  const urgencyColor = isExpired ? "#f87171" : "#fb923c";
-
-  let expiryText: string;
-  if (isExpired) {
-    const overdueDays = Math.abs(row.daysRemaining);
-    expiryText = `Expired ${fmtDate(row.expirationDate)} · ${overdueDays} day${overdueDays === 1 ? "" : "s"} ago`;
-  } else {
-    expiryText = `Expires ${fmtDate(row.expirationDate)} · ${row.daysRemaining} day${row.daysRemaining === 1 ? "" : "s"} remaining`;
-  }
+  const hasExpired = group.expiredDocs.length > 0;
+  const allDocs = [...group.expiredDocs, ...group.expiringSoonDocs];
 
   return (
     <div
-      className="flex flex-wrap items-start gap-3 px-5 py-4"
-      style={{ borderColor: "rgba(255,255,255,0.04)" }}
+      className="rounded-xl border overflow-hidden"
+      style={{
+        borderColor: hasExpired ? "rgba(239,68,68,0.2)" : "rgba(249,115,22,0.2)",
+        background: hasExpired ? "rgba(239,68,68,0.02)" : "rgba(249,115,22,0.02)",
+      }}
     >
-      {/* Member type pill */}
-      <span
-        className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-        style={
-          row.memberType === "company"
-            ? { background: "rgba(99,102,241,0.1)", color: "#818cf8" }
-            : { background: "rgba(20,184,166,0.1)", color: "#2dd4bf" }
-        }
+      {/* Member header */}
+      <div
+        className="flex flex-wrap items-center gap-3 px-5 py-3 border-b"
+        style={{ borderColor: "rgba(255,255,255,0.06)" }}
       >
-        {row.memberType === "company" ? "Company" : "Operator"}
-      </span>
+        <span
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          style={
+            group.memberType === "company"
+              ? { background: "rgba(99,102,241,0.1)", color: "#818cf8" }
+              : { background: "rgba(20,184,166,0.1)", color: "#2dd4bf" }
+          }
+        >
+          {group.memberType === "company" ? "Company" : "Operator"}
+        </span>
 
-      {/* Member + document details */}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href={profileHref}
-            className="text-sm font-medium transition-opacity hover:opacity-70"
-            style={{ color: "#e2e8f0" }}
-          >
-            {row.memberName}
-          </Link>
+        <Link
+          href={profileHref}
+          className="text-sm font-medium transition-opacity hover:opacity-70"
+          style={{ color: "#e2e8f0" }}
+        >
+          {group.memberName}
+        </Link>
+
+        {hasExpired && (
           <span
             className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-            style={{ background: "rgba(255,255,255,0.06)", color: "#94a3b8" }}
+            style={{ background: "rgba(239,68,68,0.12)", color: "#f87171" }}
           >
-            {docLabel(row.documentType)}
+            {group.expiredDocs.length} expired
           </span>
+        )}
+        {group.expiringSoonDocs.length > 0 && (
           <span
             className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-            style={
-              isExpired
-                ? { background: "rgba(239,68,68,0.12)", color: "#f87171" }
-                : { background: "rgba(249,115,22,0.12)", color: "#fb923c" }
-            }
+            style={{ background: "rgba(249,115,22,0.12)", color: "#fb923c" }}
           >
-            {isExpired ? "Expired" : "Expiring Soon"}
+            {group.expiringSoonDocs.length} expiring soon
           </span>
-        </div>
+        )}
 
-        <p className="mt-1 text-xs" style={{ color: "#64748b" }}>
-          {row.documentTitle}
-        </p>
-
-        <p className="mt-0.5 text-[11px] font-medium" style={{ color: urgencyColor }}>
-          {expiryText}
-        </p>
+        <Link
+          href={profileHref}
+          className="ml-auto shrink-0 text-[11px] transition-opacity hover:opacity-70"
+          style={{ color: "#64748b" }}
+        >
+          View profile →
+        </Link>
       </div>
 
-      {/* Profile link */}
-      <Link
-        href={profileHref}
-        className="shrink-0 self-start text-[11px] transition-opacity hover:opacity-70"
-        style={{ color: "#818cf8" }}
+      {/* Document rows */}
+      <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+        {allDocs.map((doc) => {
+          const isExpired = doc.displayStatus === "expired";
+          const overdueDays = Math.abs(doc.daysRemaining);
+
+          return (
+            <div
+              key={doc.documentType + doc.expirationDate}
+              className="flex flex-wrap items-center gap-3 px-5 py-2.5"
+            >
+              <span
+                className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                style={
+                  isExpired
+                    ? { background: "rgba(239,68,68,0.1)", color: "#f87171" }
+                    : { background: "rgba(249,115,22,0.1)", color: "#fb923c" }
+                }
+              >
+                {isExpired ? "Expired" : "Expiring Soon"}
+              </span>
+
+              <span className="text-xs font-medium" style={{ color: "#cbd5e1" }}>
+                {docLabel(doc.documentType)}
+              </span>
+
+              <span className="text-xs" style={{ color: "#64748b" }}>
+                {doc.documentTitle}
+              </span>
+
+              <span
+                className="ml-auto shrink-0 text-[11px] font-medium"
+                style={{ color: isExpired ? "#f87171" : "#fb923c" }}
+              >
+                {isExpired
+                  ? `Expired ${fmtDate(doc.expirationDate)} · ${overdueDays}d ago`
+                  : `Expires ${fmtDate(doc.expirationDate)} · ${doc.daysRemaining}d`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Outreach action */}
+      <div
+        className="px-5 py-3 border-t"
+        style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)" }}
       >
-        View profile →
-      </Link>
+        <RenewalOutreachButton
+          memberType={group.memberType}
+          profileId={group.profileId}
+          memberEmail={group.memberEmail}
+          isTokenExpired={group.isTokenExpired}
+        />
+      </div>
     </div>
   );
 }

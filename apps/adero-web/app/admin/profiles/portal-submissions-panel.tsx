@@ -43,6 +43,10 @@ function reviewContextPrefix(status: string) {
   return "Reviewed";
 }
 
+function isFollowUpOutcomeStatus(status: string) {
+  return status === "rejected" || status === "dismissed" || status === "needs_follow_up";
+}
+
 export async function PortalSubmissionsPanel({
   submissions,
   memberType,
@@ -69,6 +73,21 @@ export async function PortalSubmissionsPanel({
       }),
   );
 
+  type NewerSubmissionContext = { status: string; createdAt: Date };
+  const newerSubmissionById = new Map<string, NewerSubmissionContext>();
+  const latestSubmissionByDocument = new Map<string, NewerSubmissionContext>();
+
+  for (const submission of submissions) {
+    const latestForDocument = latestSubmissionByDocument.get(submission.documentType);
+    if (latestForDocument) {
+      newerSubmissionById.set(submission.id, latestForDocument);
+    }
+    latestSubmissionByDocument.set(submission.documentType, {
+      status: submission.status,
+      createdAt: submission.createdAt,
+    });
+  }
+
   return (
     <div
       className="rounded-xl border p-5 space-y-4"
@@ -88,6 +107,7 @@ export async function PortalSubmissionsPanel({
             MEMBER_DOCUMENT_TYPE_LABELS[sub.documentType as MemberDocumentType] ??
             sub.documentType;
           const downloadUrl = downloadUrls.get(sub.id);
+          const newerSubmission = newerSubmissionById.get(sub.id);
 
           return (
             <div
@@ -155,8 +175,22 @@ export async function PortalSubmissionsPanel({
                 </p>
               )}
 
+              {newerSubmission && (
+                <p className="text-[11px]" style={{ color: "#64748b" }}>
+                  {isFollowUpOutcomeStatus(sub.status)
+                    ? "Followed by newer member response"
+                    : "Superseded by newer submission"}{" "}
+                  on {fmtTimestamp(newerSubmission.createdAt)} (
+                  {((newerSubmission.status in STATUS_STYLES
+                    ? STATUS_STYLES[newerSubmission.status as keyof typeof STATUS_STYLES]
+                    : FALLBACK_STATUS
+                  ).label).toLowerCase()}
+                  ).
+                </p>
+              )}
+
               {/* Review actions — only for pending */}
-              {sub.status === "pending" && (
+              {sub.status === "pending" && !newerSubmission && (
                 <form action={reviewPortalSubmission} className="flex flex-wrap items-center gap-2">
                   <input type="hidden" name="submissionId" value={sub.id} />
                   <input type="hidden" name="memberType" value={memberType} />
@@ -197,6 +231,12 @@ export async function PortalSubmissionsPanel({
                     Reject
                   </button>
                 </form>
+              )}
+
+              {sub.status === "pending" && newerSubmission && (
+                <p className="text-[11px]" style={{ color: "#64748b" }}>
+                  This pending item is superseded by a newer member response.
+                </p>
               )}
             </div>
           );

@@ -79,6 +79,10 @@ function reviewContextPrefix(status: string) {
   return "Reviewed";
 }
 
+function isFollowUpOutcomeStatus(status: string) {
+  return status === "rejected" || status === "dismissed" || status === "needs_follow_up";
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function SubmissionsInboxPage({
@@ -141,6 +145,28 @@ export default async function SubmissionsInboxPage({
     .where(listConditions.length > 0 ? and(...listConditions) : undefined)
     .orderBy(desc(aderoPortalSubmissions.createdAt))
     .limit(200);
+
+  type NewerSubmissionContext = { id: string; status: string; createdAt: Date };
+  const newerSubmissionById = new Map<string, NewerSubmissionContext>();
+  const latestSubmissionByMemberDoc = new Map<string, NewerSubmissionContext>();
+
+  for (const { submission } of rows) {
+    const chainProfileId =
+      submission.memberType === "company" ? submission.companyProfileId : submission.operatorProfileId;
+    if (!chainProfileId) continue;
+
+    const chainKey = `${submission.memberType}:${chainProfileId}:${submission.documentType}`;
+    const latestInChain = latestSubmissionByMemberDoc.get(chainKey);
+    if (latestInChain) {
+      newerSubmissionById.set(submission.id, latestInChain);
+    }
+
+    latestSubmissionByMemberDoc.set(chainKey, {
+      id: submission.id,
+      status: submission.status,
+      createdAt: submission.createdAt,
+    });
+  }
 
   // ── Generate presigned download URLs ──────────────────────────────────────
   const downloadUrls = new Map<string, string>();
@@ -334,6 +360,7 @@ export default async function SubmissionsInboxPage({
               sub.documentType;
             const ss = statusStyle(sub.status);
             const downloadUrl = downloadUrls.get(sub.id);
+            const newerSubmission = newerSubmissionById.get(sub.id);
 
             return (
               <div
@@ -438,6 +465,16 @@ export default async function SubmissionsInboxPage({
                   </p>
                 )}
 
+                {newerSubmission && (
+                  <p className="mt-2 text-[11px]" style={{ color: "#64748b" }}>
+                    {isFollowUpOutcomeStatus(sub.status)
+                      ? "Followed by newer member response"
+                      : "Superseded by newer submission"}{" "}
+                    on {fmtTimestamp(newerSubmission.createdAt)} (
+                    {statusStyle(newerSubmission.status).label.toLowerCase()}).
+                  </p>
+                )}
+
                 {/* Actions row */}
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   {/* Profile link */}
@@ -452,7 +489,7 @@ export default async function SubmissionsInboxPage({
                   )}
 
                   {/* Review outcomes — pending only */}
-                  {sub.status === "pending" && profileId && (
+                  {sub.status === "pending" && profileId && !newerSubmission && (
                     <form action={reviewPortalSubmission} className="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="submissionId" value={sub.id} />
                       <input type="hidden" name="memberType" value={memberType} />
@@ -493,6 +530,12 @@ export default async function SubmissionsInboxPage({
                         Reject
                       </button>
                     </form>
+                  )}
+
+                  {sub.status === "pending" && newerSubmission && (
+                    <p className="text-[11px]" style={{ color: "#64748b" }}>
+                      This pending item is superseded by a newer member response.
+                    </p>
                   )}
                 </div>
               </div>

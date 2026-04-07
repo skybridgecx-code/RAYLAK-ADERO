@@ -3,14 +3,23 @@
 import {
   aderoAuditLogs,
   aderoCompanyProfiles,
+  aderoDocumentComplianceNotifications,
+  aderoMemberDocuments,
   aderoOperatorProfiles,
   aderoPortalSubmissions,
   db,
 } from "@raylak/db";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { MEMBER_DOCUMENT_TYPES } from "~/lib/validators";
+import type { AderoMemberType } from "~/lib/document-monitoring";
+import { getMemberDocumentSummary } from "~/lib/document-monitoring";
+import { getCurrentComplianceAction } from "~/lib/document-compliance";
+import {
+  MEMBER_DOCUMENT_TYPES,
+  type MemberDocumentComplianceAction,
+  type MemberDocumentType,
+} from "~/lib/validators";
 
 export type PortalSubmitState = {
   error: string | null;
@@ -33,6 +42,25 @@ const SubmitInput = z.object({
   fileSizeBytes: z.coerce.number().int().positive().optional(),
 });
 
+const FOLLOW_UP_ACTIONS: MemberDocumentComplianceAction[] = ["follow_up_needed", "reminder_sent"];
+
+function toKnownDocumentType(value: string): MemberDocumentType | null {
+  if (!MEMBER_DOCUMENT_TYPES.includes(value as MemberDocumentType)) return null;
+  return value as MemberDocumentType;
+}
+
+function isRejectedSubmissionStatus(status: string) {
+  return status === "rejected" || status === "dismissed";
+}
+
+function isFollowUpSubmissionStatus(status: string) {
+  return status === "needs_follow_up";
+}
+
+function needsMemberResubmission(status: string) {
+  return isRejectedSubmissionStatus(status) || isFollowUpSubmissionStatus(status);
+}
+
 export async function submitPortalDocument(
   _prev: PortalSubmitState,
   formData: FormData,
@@ -52,7 +80,8 @@ export async function submitPortalDocument(
     return { error: result.error.errors[0]?.message ?? "Invalid submission.", submitted: false };
   }
 
-  const { token, memberType, profileId, documentType, memberNote, fileKey, fileName, fileSizeBytes } = result.data;
+  const { token, memberType, profileId, documentType, memberNote, fileKey, fileName, fileSizeBytes } =
+    result.data;
   const now = new Date();
 
   // Verify the portal token still matches this profile and is not expired.
@@ -67,7 +96,10 @@ export async function submitPortalDocument(
         return { error: "Session invalid. Please reload the page.", submitted: false };
       }
       if (profile.portalTokenExpiresAt && profile.portalTokenExpiresAt <= new Date()) {
-        return { error: "This portal link has expired. Please contact your Adero representative.", submitted: false };
+        return {
+          error: "This portal link has expired. Please contact your Adero representative.",
+          submitted: false,
+        };
       }
     } else {
       const [profile] = await db
@@ -79,11 +111,128 @@ export async function submitPortalDocument(
         return { error: "Session invalid. Please reload the page.", submitted: false };
       }
       if (profile.portalTokenExpiresAt && profile.portalTokenExpiresAt <= new Date()) {
-        return { error: "This portal link has expired. Please contact your Adero representative.", submitted: false };
+        return {
+          error: "This portal link has expired. Please contact your Adero representative.",
+          submitted: false,
+        };
       }
     }
 
+    const memberDocumentFilter =
+      memberType === "company"
+        ? eq(aderoMemberDocuments.companyProfileId, profileId)
+        : eq(aderoMemberDocuments.operatorProfileId, profileId);
+
+    const complianceNotificationFilter =
+      memberType === "company"
+        ? eq(aderoDocumentComplianceNotifications.companyProfileId, profileId)
+        : eq(aderoDocumentComplianceNotifications.operatorProfileId, profileId);
+
+    const submissionMemberFilter =
+      memberType === "company"
+        ? eq(aderoPortalSubmissions.companyProfileId, profileId)
+        : eq(aderoPortalSubmissions.operatorProfileId, profileId);
+
+    const [documents, complianceNotifications, existingSubmissions] = await Promise.all([
+      db
+        .select()
+        .from(aderoMemberDocuments)
+        .where(memberDocumentFilter)
+        .orderBy(desc(aderoMemberDocuments.updatedAt)),
+      db
+        .select()
+        .from(aderoDocumentComplianceNotifications)
+        .where(complianceNotificationFilter)
+        .orderBy(desc(aderoDocumentComplianceNotifications.createdAt)),
+      db
+        .select({
+          id: aderoPortalSubmissions.id,
+          documentType: aderoPortalSubmissions.documentType,
+          status: aderoPortalSubmissions.status,
+        })
+        .from(aderoPortalSubmissions)
+        .where(submissionMemberFilter)
+        .orderBy(desc(aderoPortalSubmissions.createdAt)),
+    ]);
+
+    const summary = getMemberDocumentSummary(memberType as AderoMemberType, documents);
+    const attentionTypes = summary.requiredDocuments
+      .filter((entry) => {
+        const complianceAction = getCurrentComplianceAction(
+          complianceNotifications,
+          memberType,
+          profileId,
+          entry.documentType,
+        );
+
+        const needsFollowUp = FOLLOW_UP_ACTIONS.includes(
+          complianceAction as MemberDocumentComplianceAction,
+        );
+
+        return (
+          needsFollowUp ||
+          entry.displayStatus === "missing" ||
+          entry.displayStatus === "expired" ||
+          entry.displayStatus === "expiring_soon"
+        );
+      })
+      .map((entry) => entry.documentType);
+
+    const latestSubmissionByType = new Map<
+      MemberDocumentType,
+      (typeof existingSubmissions)[number]
+    >();
+    for (const submission of existingSubmissions) {
+      const knownType = toKnownDocumentType(submission.documentType);
+      if (!knownType || latestSubmissionByType.has(knownType)) continue;
+      latestSubmissionByType.set(knownType, submission);
+    }
+
+    const resubmissionTypes = Array.from(latestSubmissionByType.entries())
+      .filter(([, submission]) => needsMemberResubmission(submission.status))
+      .map(([documentTypeKey]) => documentTypeKey);
+
+    const allowedDocumentTypes = new Set<MemberDocumentType>([
+      ...attentionTypes,
+      ...resubmissionTypes,
+    ]);
+
+    if (!allowedDocumentTypes.has(documentType)) {
+      return {
+        error:
+          "This document type is not currently open for portal submission. Please refresh and use the listed follow-up items.",
+        submitted: false,
+      };
+    }
+
+    let submissionError: string | null = null;
+
     await db.transaction(async (tx) => {
+      const [latestSubmissionForDocument] = await tx
+        .select({
+          id: aderoPortalSubmissions.id,
+          status: aderoPortalSubmissions.status,
+        })
+        .from(aderoPortalSubmissions)
+        .where(
+          and(
+            submissionMemberFilter,
+            eq(aderoPortalSubmissions.documentType, documentType),
+          ),
+        )
+        .orderBy(desc(aderoPortalSubmissions.createdAt))
+        .limit(1);
+
+      if (latestSubmissionForDocument?.status === "pending") {
+        submissionError =
+          "A previous submission for this document is still under review. Please wait for staff review before submitting another update.";
+        return;
+      }
+
+      const isResubmission = latestSubmissionForDocument
+        ? needsMemberResubmission(latestSubmissionForDocument.status)
+        : false;
+
       await tx.insert(aderoPortalSubmissions).values({
         memberType,
         companyProfileId: memberType === "company" ? profileId : null,
@@ -103,12 +252,22 @@ export async function submitPortalDocument(
         entityId: profileId,
         companyProfileId: memberType === "company" ? profileId : null,
         operatorProfileId: memberType === "operator" ? profileId : null,
-        action: "portal_document_submitted",
+        action: isResubmission ? "portal_document_resubmitted" : "portal_document_submitted",
         actorName: null,
-        summary: `Member submitted document update for ${documentType} via portal.${fileKey ? " File attached." : ""}`,
+        summary: isResubmission
+          ? `Member submitted follow-up for ${documentType} after ${latestSubmissionForDocument?.status ?? "staff review"} via portal.${fileKey ? " File attached." : ""}`
+          : `Member submitted document update for ${documentType} via portal.${fileKey ? " File attached." : ""}`,
+        details:
+          isResubmission && latestSubmissionForDocument
+            ? `Previous submission ${latestSubmissionForDocument.id} was ${latestSubmissionForDocument.status}.`
+            : null,
         createdAt: now,
       });
     });
+
+    if (submissionError) {
+      return { error: submissionError, submitted: false };
+    }
   } catch (err) {
     console.error("[adero] submitPortalDocument failed:", err);
     return { error: "Submission failed. Please try again.", submitted: false };

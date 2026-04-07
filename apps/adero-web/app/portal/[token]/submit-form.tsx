@@ -18,12 +18,12 @@ export function PortalSubmitForm({
   token,
   memberType,
   profileId,
-  attentionTypes,
+  allowedDocumentTypes,
 }: {
   token: string;
   memberType: "company" | "operator";
   profileId: string;
-  attentionTypes: MemberDocumentType[];
+  allowedDocumentTypes: MemberDocumentType[];
 }) {
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +145,7 @@ export function PortalSubmitForm({
           <option value="" disabled style={{ background: "#0f172a" }}>
             Select a document type…
           </option>
-          {attentionTypes.map((t) => (
+          {allowedDocumentTypes.map((t) => (
             <option key={t} value={t} style={{ background: "#0f172a" }}>
               {MEMBER_DOCUMENT_TYPE_LABELS[t]}
             </option>

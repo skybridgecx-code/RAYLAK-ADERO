@@ -16,6 +16,7 @@ import {
   type AderoMemberType,
 } from "~/lib/document-monitoring";
 import {
+  MEMBER_DOCUMENT_TYPES,
   MEMBER_DOCUMENT_TYPE_LABELS,
   PROFILE_STATUS_LABELS,
   type MemberDocumentComplianceAction,
@@ -72,6 +73,37 @@ const SUBMISSION_STATUS: Record<string, { label: string; color: string }> = {
   // Legacy statuses kept for backward-compatible rendering before migration runs.
   reviewed: { label: "Accepted by staff", color: "#4ade80" },
   dismissed: { label: "Update rejected - submit a corrected document", color: "#f87171" },
+};
+
+function isAcceptedSubmissionStatus(status: string) {
+  return status === "accepted" || status === "reviewed";
+}
+
+function isRejectedSubmissionStatus(status: string) {
+  return status === "rejected" || status === "dismissed";
+}
+
+function isFollowUpSubmissionStatus(status: string) {
+  return status === "needs_follow_up";
+}
+
+function needsMemberResubmission(status: string) {
+  return isRejectedSubmissionStatus(status) || isFollowUpSubmissionStatus(status);
+}
+
+function toKnownDocumentType(value: string): MemberDocumentType | null {
+  if (!MEMBER_DOCUMENT_TYPES.includes(value as MemberDocumentType)) return null;
+  return value as MemberDocumentType;
+}
+
+const REVIEW_OUTCOME_STYLES = {
+  accepted: { bg: "rgba(34,197,94,0.06)", borderColor: "rgba(34,197,94,0.22)", color: "#4ade80" },
+  rejected: { bg: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.22)", color: "#f87171" },
+  needs_follow_up: {
+    bg: "rgba(249,115,22,0.06)",
+    borderColor: "rgba(249,115,22,0.22)",
+    color: "#fb923c",
+  },
 };
 
 // Actions that warrant a member-visible notice (without exposing internal detail)
@@ -219,7 +251,16 @@ export default async function MemberPortalPage({
     )
     .map((entry) => entry.documentType as MemberDocumentType);
 
-  const attentionLabels = attentionTypes.map((t) => MEMBER_DOCUMENT_TYPE_LABELS[t]);
+  const latestReviewedOutcomes = Array.from(latestSubmission.values()).filter(
+    (sub) => sub.status !== "pending",
+  );
+  const resubmissionTypes = latestReviewedOutcomes
+    .filter((sub) => needsMemberResubmission(sub.status))
+    .map((sub) => toKnownDocumentType(sub.documentType))
+    .filter((value): value is MemberDocumentType => value !== null);
+
+  const submissionDocTypes = Array.from(new Set([...attentionTypes, ...resubmissionTypes]));
+  const attentionLabels = submissionDocTypes.map((t) => MEMBER_DOCUMENT_TYPE_LABELS[t]);
 
   const isAccountPaused = activationStatus === "paused";
   const isAccountInactive = activationStatus === "inactive";
@@ -344,6 +385,63 @@ export default async function MemberPortalPage({
             providing.
           </p>
         </div>
+      )}
+
+      {/* Latest review outcomes */}
+      {latestReviewedOutcomes.length > 0 && (
+        <section className="space-y-3">
+          <h2
+            className="text-xs font-semibold uppercase tracking-[3px]"
+            style={{ color: "#475569" }}
+          >
+            Submission Review Outcomes
+          </h2>
+          <div className="space-y-2">
+            {latestReviewedOutcomes.map((sub) => {
+              const docType = toKnownDocumentType(sub.documentType);
+              const docLabel = docType
+                ? MEMBER_DOCUMENT_TYPE_LABELS[docType]
+                : sub.documentType;
+              const status = isAcceptedSubmissionStatus(sub.status)
+                ? "accepted"
+                : isRejectedSubmissionStatus(sub.status)
+                  ? "rejected"
+                  : isFollowUpSubmissionStatus(sub.status)
+                    ? "needs_follow_up"
+                    : null;
+              if (!status) return null;
+
+              const style = REVIEW_OUTCOME_STYLES[status];
+              const reviewMessage =
+                status === "accepted"
+                  ? "Accepted by Adero staff."
+                  : status === "rejected"
+                    ? "Rejected by Adero staff. Submit a replacement below."
+                    : "Adero staff requested follow-up details. Submit a follow-up below.";
+
+              return (
+                <div
+                  key={sub.id}
+                  className="rounded-xl border px-5 py-4 space-y-1"
+                  style={{ borderColor: style.borderColor, background: style.bg }}
+                >
+                  <p className="text-sm font-medium" style={{ color: style.color }}>
+                    {docLabel}: {reviewMessage}
+                  </p>
+                  {(sub.reviewNote || sub.reviewedBy) && (
+                    <p className="text-xs" style={{ color: "#cbd5e1" }}>
+                      {sub.reviewNote ?? "No review note was provided."}
+                    </p>
+                  )}
+                  <p className="text-[11px]" style={{ color: "#64748b" }}>
+                    {sub.reviewedBy ? `Reviewed by ${sub.reviewedBy}` : "Reviewed by Adero staff"}
+                    {` · ${fmtTimestamp(sub.updatedAt)}`}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* Required documents table */}
@@ -512,8 +610,8 @@ export default async function MemberPortalPage({
         );
       })()}
 
-      {/* Submit document update — only when there are docs needing attention */}
-      {attentionTypes.length > 0 && !isAccountInactive && (
+      {/* Submit document update */}
+      {submissionDocTypes.length > 0 && !isAccountInactive && (
         <section
           className="rounded-xl border p-5 space-y-4"
           style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
@@ -535,7 +633,7 @@ export default async function MemberPortalPage({
             token={token}
             memberType={memberType}
             profileId={profileId}
-            attentionTypes={attentionTypes}
+            allowedDocumentTypes={submissionDocTypes}
           />
         </section>
       )}

@@ -197,3 +197,37 @@ export const RequestCreationSchema = z.object({
 });
 
 export type RequestCreationInput = z.infer<typeof RequestCreationSchema>;
+
+// ─── Quote calculation and pricing ───────────────────────────────────────────
+
+export const quoteCalculationSchema = z.object({
+  serviceType: z.string().min(1),
+  estimatedDistanceMiles: z.number().positive().nullable(),
+  estimatedDurationMinutes: z.number().int().positive().nullable(),
+  pricingTier: z.enum(["standard", "premium", "surge", "custom"]).optional(),
+  tolls: z.number().min(0).optional(),
+  gratuity: z.number().min(0).optional(),
+  discount: z.number().min(0).optional(),
+  taxRate: z.number().min(0).max(1).optional(),
+  notes: z.string().optional(),
+});
+
+export const createQuoteSchema = quoteCalculationSchema.extend({
+  requestId: z.string().uuid(),
+  sendImmediately: z.boolean().optional(),
+});
+
+export const manualQuoteSchema = z.object({
+  requestId: z.string().uuid(),
+  baseFare: z.number().min(0),
+  distanceCharge: z.number().min(0).optional(),
+  timeCharge: z.number().min(0).optional(),
+  surgeCharge: z.number().min(0).optional(),
+  tolls: z.number().min(0).optional(),
+  gratuity: z.number().min(0).optional(),
+  discount: z.number().min(0).optional(),
+  taxRate: z.number().min(0).max(1).optional(),
+  totalAmount: z.number().min(0),
+  notes: z.string().optional(),
+  sendImmediately: z.boolean().optional(),
+});

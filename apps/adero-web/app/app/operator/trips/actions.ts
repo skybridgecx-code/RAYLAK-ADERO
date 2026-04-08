@@ -10,7 +10,8 @@ import {
   isAderoTripStatus,
   validateTripTransition,
 } from "@/lib/trip-lifecycle";
-import { notifyTripStatusChanged } from "@/lib/notifications";
+import { createNotification, notifyTripStatusChanged } from "@/lib/notifications";
+import { createInvoiceForTrip } from "@/lib/invoicing";
 
 export type TripLifecycleActionState = {
   error: string | null;
@@ -45,6 +46,12 @@ function revalidateTripViews(tripId: string) {
   revalidatePath(`/app/operator/trips/${tripId}`);
   revalidatePath("/app/requester");
   revalidatePath(`/app/requester/trips/${tripId}`);
+}
+
+function formatUsd(value: string | number): string {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "$0.00";
+  return `$${parsed.toFixed(2)}`;
 }
 
 async function getAuthorizedTrip(
@@ -155,6 +162,39 @@ export async function advanceTripStatus(
       await notifyTripStatusChanged(trip.requesterId, trip.id, toStatus);
     } catch (notificationError) {
       console.error("[adero] notifyTripStatusChanged failed:", notificationError);
+    }
+
+    if (toStatus === "completed") {
+      try {
+        const invoice = await createInvoiceForTrip(trip.id);
+        await Promise.all([
+          createNotification(
+            trip.requesterId,
+            "trip_completed",
+            `Invoice issued — ${formatUsd(invoice.totalAmount)} for trip #${trip.id.slice(0, 8)}`,
+            `Invoice ${invoice.invoiceNumber} is now available for your completed trip.`,
+            {
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoiceNumber,
+              tripId: trip.id,
+              totalAmount: invoice.totalAmount,
+            },
+          ),
+          createNotification(
+            trip.operatorId,
+            "trip_completed",
+            `Trip completed — invoice #${invoice.invoiceNumber} issued`,
+            `Invoice ${invoice.invoiceNumber} has been generated for completed trip #${trip.id.slice(0, 8)}.`,
+            {
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoiceNumber,
+              tripId: trip.id,
+            },
+          ),
+        ]);
+      } catch (invoiceError) {
+        console.error("[adero] createInvoiceForTrip failed:", invoiceError);
+      }
     }
 
     revalidateTripViews(trip.id);

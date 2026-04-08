@@ -17,6 +17,7 @@ import { PROFILE_STATUS_LABELS, type ProfileStatus } from "~/lib/validators";
 import { AuditHistory } from "../../../audit-history";
 import { DocumentTracking } from "../../document-tracking";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
+import { MemberLifecyclePanel } from "../../member-lifecycle-panel";
 import { PortalLinkPanel } from "../../portal-link-panel";
 import { PortalSubmissionsPanel } from "../../portal-submissions-panel";
 
@@ -253,6 +254,12 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
           </div>
 
         </div>
+
+        <MemberLifecyclePanel
+          memberType="company"
+          profileId={profile.id}
+          currentStatus={profile.activationStatus as ProfileStatus}
+        />
 
         <PortalLinkPanel
           memberType="company"

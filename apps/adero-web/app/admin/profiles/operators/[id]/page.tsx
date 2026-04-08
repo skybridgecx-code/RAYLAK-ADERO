@@ -22,6 +22,7 @@ import {
 import { AuditHistory } from "../../../audit-history";
 import { DocumentTracking } from "../../document-tracking";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
+import { MemberLifecyclePanel } from "../../member-lifecycle-panel";
 import { PortalLinkPanel } from "../../portal-link-panel";
 import { PortalSubmissionsPanel } from "../../portal-submissions-panel";
 
@@ -253,6 +254,12 @@ export default async function OperatorProfilePage({ params }: { params: Promise<
           </div>
 
         </div>
+
+        <MemberLifecyclePanel
+          memberType="operator"
+          profileId={profile.id}
+          currentStatus={profile.activationStatus as ProfileStatus}
+        />
 
         <PortalLinkPanel
           memberType="operator"

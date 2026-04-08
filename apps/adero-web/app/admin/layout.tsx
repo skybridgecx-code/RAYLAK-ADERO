@@ -46,6 +46,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               Compliance
             </Link>
             <Link
+              href="/admin/dispatch"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Dispatch
+            </Link>
+            <Link
               href="/admin/dashboard"
               className="text-xs font-medium transition-colors"
               style={{ color: "rgba(255,255,255,0.55)" }}

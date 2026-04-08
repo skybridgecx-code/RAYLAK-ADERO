@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { createRequest, type RequestActionState } from "../actions";
 import { ADERO_SERVICE_TYPE_LABELS, ADERO_SERVICE_TYPES } from "@raylak/db/schema";
 
-const initialState: RequestActionState = { error: null, fieldErrors: {}, savedId: null };
+const initialState: RequestActionState = {
+  error: null,
+  fieldErrors: {},
+  savedId: null,
+  dispatchedOffers: null,
+};
 
 function FieldError({ errors }: { errors?: string[] | undefined }) {
   if (!errors?.length) return null;
@@ -22,7 +27,11 @@ export function RequestForm({ redirectTo }: { redirectTo: string }) {
 
   useEffect(() => {
     if (state.savedId) {
-      router.push(redirectTo);
+      const timer = setTimeout(() => {
+        router.push(redirectTo);
+      }, 1500);
+
+      return () => clearTimeout(timer);
     }
   }, [state.savedId, redirectTo, router]);
 
@@ -160,10 +169,27 @@ export function RequestForm({ redirectTo }: { redirectTo: string }) {
           {state.error}
         </p>
       )}
+      {state.savedId && (
+        <div
+          className="rounded-lg border px-3 py-2 text-sm"
+          style={{
+            borderColor: "rgba(34,197,94,0.25)",
+            background: "rgba(34,197,94,0.08)",
+            color: "#86efac",
+          }}
+        >
+          {state.dispatchedOffers && state.dispatchedOffers > 0
+            ? `Request submitted. ${state.dispatchedOffers} operator${
+                state.dispatchedOffers === 1 ? " was" : "s were"
+              } notified.`
+            : "Request submitted. No operators are currently available; dispatch will be retried later."}{" "}
+          Redirecting...
+        </div>
+      )}
 
       <button
         type="submit"
-        disabled={isPending}
+        disabled={isPending || Boolean(state.savedId)}
         className="rounded-lg px-6 py-2.5 text-sm font-semibold transition-opacity disabled:opacity-50"
         style={{ background: "#6366f1", color: "#fff" }}
       >

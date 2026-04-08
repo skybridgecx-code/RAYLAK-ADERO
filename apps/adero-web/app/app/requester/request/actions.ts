@@ -2,12 +2,14 @@
 
 import { aderoRequests, db } from "@raylak/db";
 import { requireAderoRole } from "@/lib/auth";
+import { dispatchRequest } from "@/lib/dispatch";
 import { RequestCreationSchema } from "@/lib/validators";
 
 export type RequestActionState = {
   error: string | null;
   fieldErrors: Record<string, string[] | undefined>;
   savedId: string | null;
+  dispatchedOffers: number | null;
 };
 
 export async function createRequest(
@@ -18,7 +20,12 @@ export async function createRequest(
   try {
     aderoUser = await requireAderoRole(["requester", "company", "admin"]);
   } catch {
-    return { error: "You must be signed in to create a request.", fieldErrors: {}, savedId: null };
+    return {
+      error: "You must be signed in to create a request.",
+      fieldErrors: {},
+      savedId: null,
+      dispatchedOffers: null,
+    };
   }
 
   const result = RequestCreationSchema.safeParse({
@@ -36,6 +43,7 @@ export async function createRequest(
       error: "Please fix the highlighted fields.",
       fieldErrors: result.error.flatten().fieldErrors,
       savedId: null,
+      dispatchedOffers: null,
     };
   }
 
@@ -62,9 +70,21 @@ export async function createRequest(
 
     if (!request) throw new Error("Insert returned no row.");
 
-    return { error: null, fieldErrors: {}, savedId: request.id };
+    let dispatchedOffers = 0;
+    try {
+      dispatchedOffers = await dispatchRequest(request.id);
+    } catch (dispatchErr) {
+      console.error("[adero] dispatchRequest failed:", dispatchErr);
+    }
+
+    return { error: null, fieldErrors: {}, savedId: request.id, dispatchedOffers };
   } catch (err) {
     console.error("[adero] createRequest failed:", err);
-    return { error: "Request could not be saved. Please try again.", fieldErrors: {}, savedId: null };
+    return {
+      error: "Request could not be saved. Please try again.",
+      fieldErrors: {},
+      savedId: null,
+      dispatchedOffers: null,
+    };
   }
 }

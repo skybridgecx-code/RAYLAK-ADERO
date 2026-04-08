@@ -7,6 +7,7 @@ import {
   aderoDocumentComplianceNotifications,
   aderoCompanyProfiles,
   aderoMemberDocuments,
+  aderoMemberNotes,
   aderoPortalSubmissions,
   db,
 } from "@raylak/db";
@@ -18,6 +19,7 @@ import { AuditHistory } from "../../../audit-history";
 import { DocumentTracking } from "../../document-tracking";
 import { DetailRow, ProfileShell, fmt } from "../../profile-parts";
 import { MemberLifecyclePanel } from "../../member-lifecycle-panel";
+import { MemberNotesPanel } from "../../member-notes-panel";
 import { PortalLinkPanel } from "../../portal-link-panel";
 import { PortalSubmissionsPanel } from "../../portal-submissions-panel";
 
@@ -32,7 +34,7 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
   const { id } = await params;
   const PORTAL_ACTIONS = ["portal_link_copied", "portal_link_shared", "portal_link_emailed", "renewal_outreach_emailed", "portal_token_rotated", "portal_token_expired"];
 
-  const [[row], auditEntries, documents, complianceNotifications, portalEvents, portalSubmissions] =
+  const [[row], auditEntries, documents, complianceNotifications, portalEvents, portalSubmissions, memberNotes] =
     await Promise.all([
       db
         .select({
@@ -77,6 +79,11 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
         .from(aderoPortalSubmissions)
         .where(eq(aderoPortalSubmissions.companyProfileId, id))
         .orderBy(desc(aderoPortalSubmissions.createdAt)),
+      db
+        .select()
+        .from(aderoMemberNotes)
+        .where(eq(aderoMemberNotes.companyProfileId, id))
+        .orderBy(desc(aderoMemberNotes.createdAt)),
     ]);
 
   if (!row) notFound();
@@ -189,6 +196,12 @@ export default async function CompanyProfilePage({ params }: { params: Promise<{
           />
 
           <AuditHistory entries={auditEntries} />
+
+          <MemberNotesPanel
+            notes={memberNotes}
+            memberType="company"
+            profileId={profile.id}
+          />
         </div>
 
         <div

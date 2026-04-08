@@ -13,3 +13,4 @@ export * from "./adero-compliance-assignments";
 export * from "./adero-compliance-review-notes";
 export * from "./adero-audit-logs";
 export * from "./adero-portal-submissions";
+export * from "./adero-member-notes";

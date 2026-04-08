@@ -4,8 +4,6 @@ export const metadata: Metadata = {
   title: "Adero — The Dispatch Network for Premium Transportation",
 };
 
-// ─── Nav ─────────────────────────────────────────────────────────────────────
-
 function Nav() {
   return (
     <header
@@ -43,19 +41,26 @@ function Nav() {
             </a>
           ))}
         </nav>
-        <a
-          href="/apply"
-          className="rounded px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80"
-          style={{ background: "#6366f1" }}
-        >
-          Apply to Join
-        </a>
+        <div className="flex items-center gap-3">
+          <a
+            href="/auth/sign-in"
+            className="rounded px-4 py-2 text-sm font-medium transition-colors hover:bg-white/5"
+            style={{ color: "rgba(255,255,255,0.6)" }}
+          >
+            Sign In
+          </a>
+          <a
+            href="/apply"
+            className="rounded px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80"
+            style={{ background: "#6366f1" }}
+          >
+            Apply to Join
+          </a>
+        </div>
       </div>
     </header>
   );
 }
-
-// ─── Hero ─────────────────────────────────────────────────────────────────────
 
 function Hero() {
   return (
@@ -121,8 +126,6 @@ function Hero() {
   );
 }
 
-// ─── Stats bar ────────────────────────────────────────────────────────────────
-
 function StatsBar() {
   const stats = [
     { value: "Premium Only", label: "Vetted network members" },
@@ -151,8 +154,6 @@ function StatsBar() {
     </section>
   );
 }
-
-// ─── For Companies ─────────────────────────────────────────────────────────────
 
 function ForCompanies() {
   const features = [
@@ -232,8 +233,6 @@ function ForCompanies() {
   );
 }
 
-// ─── For Operators ─────────────────────────────────────────────────────────────
-
 function ForOperators() {
   const benefits = [
     {
@@ -307,8 +306,6 @@ function ForOperators() {
     </section>
   );
 }
-
-// ─── How It Works ─────────────────────────────────────────────────────────────
 
 function HowItWorks() {
   const steps = [
@@ -391,8 +388,6 @@ function HowItWorks() {
   );
 }
 
-// ─── Positioning callout ───────────────────────────────────────────────────────
-
 function PositioningCallout() {
   return (
     <section className="py-20 px-6 bg-white">
@@ -448,8 +443,6 @@ function PositioningCallout() {
   );
 }
 
-// ─── Apply CTA ────────────────────────────────────────────────────────────────
-
 function ApplyCTA() {
   return (
     <section
@@ -498,8 +491,6 @@ function ApplyCTA() {
   );
 }
 
-// ─── Footer ───────────────────────────────────────────────────────────────────
-
 function Footer() {
   return (
     <footer
@@ -540,8 +531,6 @@ function Footer() {
     </footer>
   );
 }
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
   return (

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AderoClerkProvider } from "@/components/adero-clerk-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,7 +24,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AderoClerkProvider>{children}</AderoClerkProvider>
+      </body>
     </html>
   );
 }

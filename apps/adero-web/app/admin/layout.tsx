@@ -53,6 +53,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               Dispatch
             </Link>
             <Link
+              href="/admin/pricing"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Pricing Rules
+            </Link>
+            <Link
+              href="/admin/pricing/quotes"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Quotes
+            </Link>
+            <Link
+              href="/admin/pricing/invoices"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Invoices
+            </Link>
+            <Link
+              href="/admin/pricing/payments"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Payments
+            </Link>
+            <Link
+              href="/admin/pricing/stripe-accounts"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Stripe Accounts
+            </Link>
+            <Link
               href="/admin/dashboard"
               className="text-xs font-medium transition-colors"
               style={{ color: "rgba(255,255,255,0.55)" }}

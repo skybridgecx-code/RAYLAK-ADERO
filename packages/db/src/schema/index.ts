@@ -21,3 +21,4 @@ export * from "./adero-trip-status-log";
 export * from "./adero-operator-availability";
 export * from "./adero-request-offers";
 export * from "./adero-notifications";
+export * from "./adero-pricing";

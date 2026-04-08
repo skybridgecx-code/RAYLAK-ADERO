@@ -6,6 +6,7 @@ import {
   adminCancelInvoice,
   adminMarkOverdue,
   adminRecordManualPayment,
+  adminSendPaymentReminder,
 } from "../actions";
 
 export function InvoiceRowActions({
@@ -27,6 +28,7 @@ export function InvoiceRowActions({
 
   const canCancel = status === "issued" || status === "overdue";
   const canMarkOverdue = status === "issued";
+  const canSendReminder = status === "issued" || status === "overdue";
   const canRecordPayment =
     status !== "paid" && status !== "refunded" && status !== "canceled";
 
@@ -86,6 +88,34 @@ export function InvoiceRowActions({
             style={{ background: "rgba(234,179,8,0.2)", color: "#fde68a" }}
           >
             {isPending ? "Working…" : "Mark Overdue"}
+          </button>
+        )}
+
+        {canSendReminder && (
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => {
+              setFeedback(null);
+              startTransition(async () => {
+                try {
+                  await adminSendPaymentReminder(invoiceId);
+                  setFeedback({ type: "success", text: "Reminder sent." });
+                } catch (error) {
+                  setFeedback({
+                    type: "error",
+                    text:
+                      error instanceof Error
+                        ? error.message
+                        : "Send reminder failed.",
+                  });
+                }
+              });
+            }}
+            className="rounded-md px-2.5 py-1 text-xs font-medium disabled:opacity-50"
+            style={{ background: "rgba(56,189,248,0.2)", color: "#7dd3fc" }}
+          >
+            {isPending ? "Working…" : "Send Reminder"}
           </button>
         )}
 

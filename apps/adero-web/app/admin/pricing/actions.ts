@@ -16,6 +16,12 @@ import {
   db,
 } from "@raylak/db";
 import { cancelInvoice, markInvoiceOverdue } from "@/lib/invoicing";
+import {
+  checkAndExpireQuotes,
+  checkAndMarkOverdueInvoices,
+  getRevenueStats,
+  sendPaymentReminder,
+} from "@/lib/payment-lifecycle";
 import { recordManualPayment } from "@/lib/stripe";
 
 const CreatePricingRuleSchema = z.object({
@@ -240,4 +246,33 @@ export async function adminRecordManualPayment(formData: FormData): Promise<void
 
   revalidatePath("/admin/pricing/invoices");
   revalidatePath("/admin/pricing/payments");
+}
+
+export async function adminSendPaymentReminder(
+  invoiceId: string,
+): Promise<{ success: true }> {
+  await assertAdminAccess();
+  await sendPaymentReminder(invoiceId);
+  revalidatePath("/admin/pricing/invoices");
+  return { success: true };
+}
+
+export async function adminGetRevenueStats() {
+  await assertAdminAccess();
+  return getRevenueStats();
+}
+
+export async function adminRunOverdueCheck() {
+  await assertAdminAccess();
+  const overdueInvoices = await checkAndMarkOverdueInvoices();
+  const expiredQuotes = await checkAndExpireQuotes();
+
+  revalidatePath("/admin/pricing/invoices");
+  revalidatePath("/admin/pricing/quotes");
+  revalidatePath("/admin/pricing");
+
+  return {
+    overdueInvoices,
+    expiredQuotes,
+  };
 }

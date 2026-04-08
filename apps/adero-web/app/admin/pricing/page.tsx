@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { createPricingRule, getPricingRules } from "./actions";
+import {
+  adminGetRevenueStats,
+  createPricingRule,
+  getPricingRules,
+} from "./actions";
+import { RunOverdueCheckButton } from "./run-overdue-check-button";
 import { RuleToggleButton } from "./rule-toggle-button";
 
 export const metadata: Metadata = {
@@ -25,7 +30,7 @@ function formatDate(value: Date): string {
 }
 
 export default async function AdminPricingRulesPage() {
-  const rules = await getPricingRules();
+  const [rules, stats] = await Promise.all([getPricingRules(), adminGetRevenueStats()]);
 
   return (
     <div className="space-y-8">
@@ -37,6 +42,52 @@ export default async function AdminPricingRulesPage() {
           Manage fare logic for quote generation across service tiers.
         </p>
       </div>
+
+      <section
+        className="rounded-xl border p-5"
+        style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-[2px]" style={{ color: "#475569" }}>
+              Billing Snapshot
+            </h2>
+            <p className="mt-1 text-xs" style={{ color: "#64748b" }}>
+              Current invoice, collection, and platform fee totals.
+            </p>
+          </div>
+          <RunOverdueCheckButton />
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "Total Invoiced", value: formatMoney(String(stats.totalInvoiced)) },
+            { label: "Total Collected", value: formatMoney(String(stats.totalCollected)) },
+            { label: "Outstanding", value: formatMoney(String(stats.totalOutstanding)) },
+            { label: "Overdue", value: formatMoney(String(stats.totalOverdue)) },
+            { label: "Platform Fees", value: formatMoney(String(stats.totalPlatformFees)) },
+            { label: "Invoice Count", value: String(stats.invoiceCount) },
+            { label: "Paid Count", value: String(stats.paidCount) },
+            { label: "Overdue Count", value: String(stats.overdueCount) },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="rounded-lg border px-3 py-3"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                background: "rgba(15,23,42,0.45)",
+              }}
+            >
+              <p className="text-[11px] uppercase tracking-[1.2px]" style={{ color: "#64748b" }}>
+                {item.label}
+              </p>
+              <p className="mt-1 text-lg font-semibold" style={{ color: "#e2e8f0" }}>
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section
         className="rounded-xl border p-5"

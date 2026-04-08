@@ -238,3 +238,23 @@ export const manualInvoiceSchema = z.object({
   taxRate: z.number().min(0).max(1).optional(),
   notes: z.string().optional(),
 });
+
+export const locationUpdateSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  altitude: z.number().nullable().optional(),
+  heading: z.number().min(0).max(360).nullable().optional(),
+  speed: z.number().min(0).nullable().optional(),
+  accuracy: z.number().min(0).nullable().optional(),
+  source: z.enum(["gps", "manual", "network", "fused"]).optional(),
+  recordedAt: z.string().datetime(),
+});
+
+export const startTrackingSchema = z.object({
+  tripId: z.string().uuid(),
+});
+
+export const recordLocationSchema = z.object({
+  sessionId: z.string().uuid(),
+  location: locationUpdateSchema,
+});

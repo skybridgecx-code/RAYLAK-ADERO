@@ -8,14 +8,15 @@ import {
   aderoTrips,
   db,
 } from "@raylak/db";
+import { updateEtaOnLocationChange } from "./eta";
+import { calculateDistanceBetweenPoints } from "./geo-utils";
+export { MILES_PER_METER, calculateDistanceBetweenPoints } from "./geo-utils";
 
 export const MIN_LOCATION_INTERVAL_MS = 3000;
 export const MAX_LOCATION_AGE_MS = 30000;
 export const STALE_LOCATION_THRESHOLD_MS = 120000;
-export const MILES_PER_METER = 0.000621371;
 
 const FUTURE_TOLERANCE_MS = 5000;
-const EARTH_RADIUS_METERS = 6371000;
 
 type LocationSource = "gps" | "manual" | "network" | "fused";
 
@@ -116,28 +117,6 @@ export function validateLocationUpdate(
   }
 
   return { valid: true };
-}
-
-export function calculateDistanceBetweenPoints(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const toRadians = (value: number) => (value * Math.PI) / 180;
-
-  const lat1Rad = toRadians(lat1);
-  const lat2Rad = toRadians(lat2);
-  const deltaLat = toRadians(lat2 - lat1);
-  const deltaLon = toRadians(lon2 - lon1);
-
-  const a =
-    Math.sin(deltaLat / 2) ** 2
-    + Math.cos(lat1Rad) * Math.cos(lat2Rad) * Math.sin(deltaLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const meters = EARTH_RADIUS_METERS * c;
-
-  return round(meters * MILES_PER_METER, 4);
 }
 
 const TRACKABLE_TRIP_STATUSES = [
@@ -309,6 +288,8 @@ export async function recordLocation(
   recorded: boolean;
   location?: typeof aderoTripLocations.$inferSelect;
   reason?: string;
+  eta?: Awaited<ReturnType<typeof updateEtaOnLocationChange>>["eta"];
+  geofenceEvent?: Awaited<ReturnType<typeof updateEtaOnLocationChange>>["geofenceEvent"];
 }> {
   const [session] = await db
     .select()
@@ -334,7 +315,7 @@ export async function recordLocation(
 
   const now = new Date();
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [previousLocation] = await tx
       .select({
         id: aderoTripLocations.id,
@@ -427,6 +408,33 @@ export async function recordLocation(
 
     return { recorded: true, location: insertedLocation };
   });
+
+  if (!result.recorded || !result.location) {
+    return result;
+  }
+
+  try {
+    const etaUpdate = await updateEtaOnLocationChange(
+      session.tripId,
+      session.operatorUserId,
+      update.latitude,
+      update.longitude,
+      update.speed ?? null,
+    );
+
+    return {
+      ...result,
+      eta: etaUpdate.eta,
+      geofenceEvent: etaUpdate.geofenceEvent,
+    };
+  } catch (error) {
+    console.error("[adero/tracking] ETA update failed:", error);
+    return {
+      ...result,
+      eta: null,
+      geofenceEvent: null,
+    };
+  }
 }
 
 export async function getLatestLocation(

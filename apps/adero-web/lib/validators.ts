@@ -258,3 +258,11 @@ export const recordLocationSchema = z.object({
   sessionId: z.string().uuid(),
   location: locationUpdateSchema,
 });
+
+export const etaCalculationSchema = z.object({
+  tripId: z.string().uuid(),
+  currentLatitude: z.number().min(-90).max(90),
+  currentLongitude: z.number().min(-180).max(180),
+  currentSpeedMph: z.number().min(0).nullable().optional(),
+  destinationType: z.enum(["pickup", "dropoff"]),
+});

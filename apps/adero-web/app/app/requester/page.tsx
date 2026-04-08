@@ -37,6 +37,13 @@ const TRIP_STATUS_STYLES: Record<AderoTripStatus, { bg: string; color: string }>
   canceled: { bg: "rgba(239,68,68,0.1)", color: "#f87171" },
 };
 
+const TRACKABLE_TRIP_STATUSES: ReadonlySet<AderoTripStatus> = new Set([
+  "assigned",
+  "operator_en_route",
+  "operator_arrived",
+  "in_progress",
+]);
+
 function fmtDatetime(date: Date) {
   return date.toLocaleDateString("en-US", {
     month: "short",
@@ -168,6 +175,7 @@ export default async function RequesterDashboardPage() {
               const statusStyle =
                 TRIP_STATUS_STYLES[status] ?? TRIP_STATUS_STYLES.assigned;
               const statusLabel = ADERO_TRIP_STATUS_LABELS[status] ?? trip.status;
+              const canTrack = TRACKABLE_TRIP_STATUSES.has(status);
 
               return (
                 <div
@@ -200,7 +208,7 @@ export default async function RequesterDashboardPage() {
                       className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium"
                       style={{ background: "rgba(99,102,241,0.16)", color: "#a5b4fc" }}
                     >
-                      Track →
+                      {canTrack ? "📍 Track Trip" : "View Trip"}
                     </Link>
                   </div>
                 </div>

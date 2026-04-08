@@ -19,6 +19,7 @@ import {
 } from "@raylak/db/schema";
 import { requireAderoRole } from "@/lib/auth";
 import { isAderoTripStatus } from "@/lib/trip-lifecycle";
+import { TripTrackingView } from "@/components/trip-tracking-view";
 
 export const metadata: Metadata = {
   title: "Trip Tracking - Adero",
@@ -83,9 +84,13 @@ export default async function RequesterTripTrackingPage({
       requestPickupAt: aderoRequests.pickupAt,
       requestStatus: aderoRequests.status,
       requestServiceType: aderoRequests.serviceType,
+      operatorFirstName: aderoUsers.firstName,
+      operatorLastName: aderoUsers.lastName,
+      operatorEmail: aderoUsers.email,
     })
     .from(aderoTrips)
     .innerJoin(aderoRequests, eq(aderoTrips.requestId, aderoRequests.id))
+    .leftJoin(aderoUsers, eq(aderoTrips.operatorId, aderoUsers.id))
     .where(eq(aderoTrips.id, id))
     .limit(1);
 
@@ -124,6 +129,10 @@ export default async function RequesterTripTrackingPage({
   const serviceTypeLabel =
     ADERO_SERVICE_TYPE_LABELS[trip.requestServiceType as AderoServiceType] ??
     trip.requestServiceType;
+  const operatorDisplayName = [trip.operatorFirstName, trip.operatorLastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || trip.operatorEmail || null;
 
   return (
     <div className="space-y-6">
@@ -199,6 +208,13 @@ export default async function RequesterTripTrackingPage({
           </p>
         </div>
       </div>
+
+      <TripTrackingView
+        tripId={trip.id}
+        pickupAddress={trip.pickupAddress}
+        dropoffAddress={trip.dropoffAddress}
+        operatorName={operatorDisplayName}
+      />
 
       <div
         className="rounded-xl border p-5"

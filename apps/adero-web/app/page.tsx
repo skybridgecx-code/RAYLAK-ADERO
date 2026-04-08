@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Adero — The Dispatch Network for Premium Transportation",
@@ -42,13 +43,13 @@ function Nav() {
           ))}
         </nav>
         <div className="flex items-center gap-3">
-          <a
+          <Link
             href="/auth/sign-in"
             className="rounded px-4 py-2 text-sm font-medium transition-colors hover:bg-white/5"
             style={{ color: "rgba(255,255,255,0.6)" }}
           >
             Sign In
-          </a>
+          </Link>
           <a
             href="/apply"
             className="rounded px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80"

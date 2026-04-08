@@ -18,6 +18,7 @@ function roleNavItems(role: AderoRole): { label: string; href: string }[] {
     case "requester":
       return [
         { label: "Dashboard", href: "/app/requester" },
+        { label: "New Request", href: "/app/requester/request/new" },
       ];
     case "operator":
       return [
@@ -26,6 +27,7 @@ function roleNavItems(role: AderoRole): { label: string; href: string }[] {
     case "company":
       return [
         { label: "Dashboard", href: "/app/company" },
+        { label: "New Request", href: "/app/company/request/new" },
       ];
     case "admin":
       return [

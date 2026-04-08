@@ -15,3 +15,4 @@ export * from "./adero-audit-logs";
 export * from "./adero-portal-submissions";
 export * from "./adero-member-notes";
 export * from "./adero-users";
+export * from "./adero-requests";

@@ -176,3 +176,24 @@ export const initialActionState: ApplicationActionState = {
   error: null,
   fieldErrors: {},
 };
+
+// ─── Request creation ─────────────────────────────────────────────────────────
+
+export const RequestCreationSchema = z.object({
+  serviceType: z.string().min(1, "Service type is required"),
+  pickupAddress: z.string().trim().min(5, "Pickup address is required"),
+  dropoffAddress: z.string().trim().min(5, "Drop-off address is required"),
+  pickupAt: z.string().min(1, "Pickup date and time is required").refine(
+    (v) => !isNaN(Date.parse(v)),
+    "Must be a valid date and time",
+  ),
+  passengerCount: z.coerce
+    .number()
+    .int()
+    .min(1, "At least 1 passenger required")
+    .max(100, "Passenger count too high"),
+  vehiclePreference: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
+});
+
+export type RequestCreationInput = z.infer<typeof RequestCreationSchema>;

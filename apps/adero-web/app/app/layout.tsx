@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { resolveAderoUser } from "@/lib/auth";
+import { db, aderoNotifications } from "@raylak/db";
 import type { AderoRole } from "@raylak/db/schema";
+import { and, count, eq, isNull } from "drizzle-orm";
 
 function roleLabel(role: string): string {
   const labels: Record<string, string> = {
@@ -19,19 +21,23 @@ function roleNavItems(role: AderoRole): { label: string; href: string }[] {
       return [
         { label: "Dashboard", href: "/app/requester" },
         { label: "New Request", href: "/app/requester/request/new" },
+        { label: "Notifications", href: "/app/notifications" },
       ];
     case "operator":
       return [
         { label: "Dashboard", href: "/app/operator" },
+        { label: "Notifications", href: "/app/notifications" },
       ];
     case "company":
       return [
         { label: "Dashboard", href: "/app/company" },
         { label: "New Request", href: "/app/company/request/new" },
+        { label: "Notifications", href: "/app/notifications" },
       ];
     case "admin":
       return [
         { label: "Dashboard", href: "/app" },
+        { label: "Notifications", href: "/app/notifications" },
         { label: "Admin Panel", href: "/admin" },
       ];
     default:
@@ -43,6 +49,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const aderoUser = await resolveAderoUser();
   const role = (aderoUser?.role ?? "requester") as AderoRole;
   const navItems = roleNavItems(role);
+  let unreadCount = 0;
+
+  if (aderoUser) {
+    const [row] = await db
+      .select({ n: count() })
+      .from(aderoNotifications)
+      .where(
+        and(
+          eq(aderoNotifications.userId, aderoUser.id),
+          isNull(aderoNotifications.readAt),
+        ),
+      );
+
+    unreadCount = Number(row?.n ?? 0);
+  }
 
   return (
     <div className="min-h-screen" style={{ background: "#0f172a", color: "#f1f5f9" }}>
@@ -65,10 +86,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link
                 key={item.href}
                 href={item.href}
-                className="text-xs font-medium transition-colors"
+                className="flex items-center gap-1 text-xs font-medium transition-colors"
                 style={{ color: "rgba(255,255,255,0.55)" }}
               >
                 {item.label}
+                {item.href === "/app/notifications" && unreadCount > 0 && (
+                  <span
+                    className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      background: "rgba(99,102,241,0.2)",
+                      color: "#c7d2fe",
+                    }}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

@@ -8,6 +8,10 @@ import {
   aderoRequests,
   aderoUsers,
 } from "@raylak/db";
+import {
+  notifyOfferReceived,
+  notifyRequestMatched,
+} from "./notifications";
 
 function normalize(value: string | null | undefined): string {
   return value?.trim().toLowerCase() ?? "";
@@ -41,11 +45,11 @@ function serviceAreaMatchesRequest(
  */
 export async function dispatchRequest(requestId: string): Promise<number> {
   const now = new Date();
-
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [request] = await tx
       .select({
         id: aderoRequests.id,
+        requesterId: aderoRequests.requesterId,
         status: aderoRequests.status,
         pickupAddress: aderoRequests.pickupAddress,
         dropoffAddress: aderoRequests.dropoffAddress,
@@ -59,7 +63,12 @@ export async function dispatchRequest(requestId: string): Promise<number> {
     }
 
     if (request.status !== "submitted" && request.status !== "matched") {
-      return 0;
+      return {
+        requestId: request.id,
+        requesterId: request.requesterId,
+        operatorIds: [] as string[],
+        offersCreated: 0,
+      };
     }
 
     const availableOperators = await tx
@@ -77,7 +86,12 @@ export async function dispatchRequest(requestId: string): Promise<number> {
       );
 
     if (availableOperators.length === 0) {
-      return 0;
+      return {
+        requestId: request.id,
+        requesterId: request.requesterId,
+        operatorIds: [] as string[],
+        offersCreated: 0,
+      };
     }
 
     const availableOperatorIds = availableOperators.map((operator) => operator.operatorId);
@@ -109,7 +123,12 @@ export async function dispatchRequest(requestId: string): Promise<number> {
     });
 
     if (eligibleOperators.length === 0) {
-      return 0;
+      return {
+        requestId: request.id,
+        requesterId: request.requesterId,
+        operatorIds: [] as string[],
+        offersCreated: 0,
+      };
     }
 
     await tx.insert(aderoRequestOffers).values(
@@ -137,6 +156,34 @@ export async function dispatchRequest(requestId: string): Promise<number> {
         );
     }
 
-    return eligibleOperators.length;
+    return {
+      requestId: request.id,
+      requesterId: request.requesterId,
+      operatorIds: eligibleOperators.map((operator) => operator.operatorId),
+      offersCreated: eligibleOperators.length,
+    };
   });
+
+  if (result.offersCreated > 0) {
+    const notificationTasks: Promise<unknown>[] = result.operatorIds.map((operatorId) =>
+      notifyOfferReceived(operatorId, result.requestId),
+    );
+    notificationTasks.push(
+      notifyRequestMatched(
+        result.requesterId,
+        result.requestId,
+        result.offersCreated,
+      ),
+    );
+
+    const outcomes = await Promise.allSettled(notificationTasks);
+    const failed = outcomes.filter((outcome) => outcome.status === "rejected");
+    if (failed.length > 0) {
+      console.error(
+        `[adero] dispatch notifications failed for ${failed.length} recipient(s).`,
+      );
+    }
+  }
+
+  return result.offersCreated;
 }

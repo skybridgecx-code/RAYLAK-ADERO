@@ -13,6 +13,10 @@ import {
 } from "@raylak/db";
 import { requireAderoRole } from "@/lib/auth";
 import { dispatchRequest } from "@/lib/dispatch";
+import {
+  notifyOfferReceived,
+  notifyRequestMatched,
+} from "@/lib/notifications";
 
 const DispatchRequestSchema = z.object({
   requestId: z.string().uuid(),
@@ -91,12 +95,15 @@ export async function createManualOffer(formData: FormData): Promise<void> {
 
   const { requestId, operatorId } = parsed.data;
   const now = new Date();
+  let requesterUserId: string | null = null;
+  let shouldNotifyMatched = false;
 
   try {
     await db.transaction(async (tx) => {
       const [request] = await tx
         .select({
           id: aderoRequests.id,
+          requesterId: aderoRequests.requesterId,
           status: aderoRequests.status,
         })
         .from(aderoRequests)
@@ -110,6 +117,9 @@ export async function createManualOffer(formData: FormData): Promise<void> {
       if (request.status !== "submitted" && request.status !== "matched") {
         throw new Error(`Request is ${request.status} and cannot be dispatched.`);
       }
+
+      requesterUserId = request.requesterId;
+      shouldNotifyMatched = request.status === "submitted";
 
       const [operator] = await tx
         .select({
@@ -171,6 +181,15 @@ export async function createManualOffer(formData: FormData): Promise<void> {
           );
       }
     });
+
+    try {
+      await notifyOfferReceived(operatorId, requestId);
+      if (requesterUserId && shouldNotifyMatched) {
+        await notifyRequestMatched(requesterUserId, requestId, 1);
+      }
+    } catch (notificationError) {
+      console.error("[adero] createManualOffer notifications failed:", notificationError);
+    }
 
     revalidateDispatchSurfaces();
     redirect(noticeUrl("Manual offer created.", "success"));

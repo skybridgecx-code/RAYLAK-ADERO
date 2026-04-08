@@ -17,6 +17,10 @@ import {
   ADERO_REQUEST_OFFER_STATUSES,
 } from "@raylak/db/schema";
 import { requireAderoRole } from "@/lib/auth";
+import {
+  notifyRequestAccepted,
+  resolveOperatorDisplayName,
+} from "@/lib/notifications";
 
 export type OperatorWorkflowActionState = {
   error: string | null;
@@ -135,6 +139,9 @@ export async function acceptOffer(
   const { offerId } = parsed.data;
   const now = new Date();
   let tripId: string | null = null;
+  let acceptedRequestId: string | null = null;
+  let requesterUserId: string | null = null;
+  let acceptedOperatorId: string | null = null;
 
   try {
     await db.transaction(async (tx) => {
@@ -144,6 +151,7 @@ export async function acceptOffer(
           requestId: aderoRequestOffers.requestId,
           operatorId: aderoRequestOffers.operatorId,
           offerStatus: aderoRequestOffers.status,
+          requesterId: aderoRequests.requesterId,
           requestStatus: aderoRequests.status,
           pickupAddress: aderoRequests.pickupAddress,
           dropoffAddress: aderoRequests.dropoffAddress,
@@ -245,6 +253,9 @@ export async function acceptOffer(
       }
 
       tripId = trip.id;
+      acceptedRequestId = offer.requestId;
+      requesterUserId = offer.requesterId;
+      acceptedOperatorId = offer.operatorId;
 
       await tx.insert(aderoTripStatusLog).values({
         tripId: trip.id,
@@ -258,6 +269,15 @@ export async function acceptOffer(
   } catch (error) {
     console.error("[adero] acceptOffer failed:", error);
     return { error: actionError(error), success: null, tripId: null };
+  }
+
+  if (requesterUserId && acceptedRequestId && acceptedOperatorId) {
+    try {
+      const operatorName = await resolveOperatorDisplayName(acceptedOperatorId);
+      await notifyRequestAccepted(requesterUserId, acceptedRequestId, operatorName);
+    } catch (notificationError) {
+      console.error("[adero] notifyRequestAccepted failed:", notificationError);
+    }
   }
 
   revalidateOperatorViews(offerId, tripId ?? undefined);

@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, aderoTripStatusLog, aderoTrips } from "@raylak/db";
+import { db, aderoRequests, aderoTripStatusLog, aderoTrips } from "@raylak/db";
 import type { AderoTripStatus, AderoUser } from "@raylak/db/schema";
 import { requireAderoRole } from "@/lib/auth";
 import {
   isAderoTripStatus,
   validateTripTransition,
 } from "@/lib/trip-lifecycle";
+import { notifyTripStatusChanged } from "@/lib/notifications";
 
 export type TripLifecycleActionState = {
   error: string | null;
@@ -53,6 +54,7 @@ async function getAuthorizedTrip(
   id: string;
   status: AderoTripStatus;
   operatorId: string;
+  requesterId: string;
   startedAt: Date | null;
 }> {
   const [trip] = await db
@@ -60,9 +62,11 @@ async function getAuthorizedTrip(
       id: aderoTrips.id,
       status: aderoTrips.status,
       operatorId: aderoTrips.operatorId,
+      requesterId: aderoRequests.requesterId,
       startedAt: aderoTrips.startedAt,
     })
     .from(aderoTrips)
+    .innerJoin(aderoRequests, eq(aderoTrips.requestId, aderoRequests.id))
     .where(eq(aderoTrips.id, tripId))
     .limit(1);
 
@@ -82,6 +86,7 @@ async function getAuthorizedTrip(
     id: trip.id,
     status: trip.status,
     operatorId: trip.operatorId,
+    requesterId: trip.requesterId,
     startedAt: trip.startedAt,
   };
 }
@@ -146,6 +151,12 @@ export async function advanceTripStatus(
       });
     });
 
+    try {
+      await notifyTripStatusChanged(trip.requesterId, trip.id, toStatus);
+    } catch (notificationError) {
+      console.error("[adero] notifyTripStatusChanged failed:", notificationError);
+    }
+
     revalidateTripViews(trip.id);
 
     return { error: null, success: "Trip status updated." };
@@ -209,6 +220,12 @@ export async function cancelTrip(
         createdAt: now,
       });
     });
+
+    try {
+      await notifyTripStatusChanged(trip.requesterId, trip.id, "canceled");
+    } catch (notificationError) {
+      console.error("[adero] notifyTripStatusChanged failed:", notificationError);
+    }
 
     revalidateTripViews(trip.id);
 

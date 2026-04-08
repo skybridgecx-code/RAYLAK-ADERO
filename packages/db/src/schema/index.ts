@@ -18,3 +18,5 @@ export * from "./adero-users";
 export * from "./adero-requests";
 export * from "./adero-trips";
 export * from "./adero-trip-status-log";
+export * from "./adero-operator-availability";
+export * from "./adero-request-offers";

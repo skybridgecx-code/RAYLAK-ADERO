@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { requireAderoRole } from "@/lib/auth";
 import {
   db,
   aderoOperatorAvailability,
   aderoRequestOffers,
   aderoRequests,
+  aderoTrackingSessions,
   aderoTrips,
 } from "@raylak/db";
 import {
@@ -59,7 +60,7 @@ function fmtDatetime(date: Date | null): string {
 export default async function OperatorDashboardPage() {
   const aderoUser = await requireAderoRole(["operator", "admin"]);
 
-  const [trips, availabilityRow, pendingOffers] = await Promise.all([
+  const [trips, availabilityRow, pendingOffers, activeTrackingSessions] = await Promise.all([
     db
       .select()
       .from(aderoTrips)
@@ -92,6 +93,17 @@ export default async function OperatorDashboardPage() {
         ),
       )
       .orderBy(desc(aderoRequestOffers.offeredAt)),
+    db
+      .select({
+        tripId: aderoTrackingSessions.tripId,
+      })
+      .from(aderoTrackingSessions)
+      .where(
+        and(
+          eq(aderoTrackingSessions.operatorUserId, aderoUser.id),
+          isNull(aderoTrackingSessions.endedAt),
+        ),
+      ),
   ]);
 
   const availability = availabilityRow[0];
@@ -105,6 +117,7 @@ export default async function OperatorDashboardPage() {
     (trip) => trip.status !== "completed" && trip.status !== "canceled",
   );
   const completedTrips = trips.filter((trip) => trip.status === "completed");
+  const activeTrackingTripIds = new Set(activeTrackingSessions.map((row) => row.tripId));
 
   return (
     <div className="space-y-8">
@@ -311,12 +324,29 @@ export default async function OperatorDashboardPage() {
                 >
                   <div className="flex flex-wrap items-start gap-3">
                     <div className="min-w-0 flex-1 space-y-1">
-                      <span
-                        className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                        style={statusStyle}
-                      >
-                        {statusLabel}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                          style={statusStyle}
+                        >
+                          {statusLabel}
+                        </span>
+                        {activeTrackingTripIds.has(trip.id) ? (
+                          <span
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{ background: "rgba(34,197,94,0.18)", color: "#86efac" }}
+                          >
+                            📍 Tracking
+                          </span>
+                        ) : (
+                          <span
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{ background: "rgba(148,163,184,0.14)", color: "#cbd5e1" }}
+                          >
+                            📍 Not tracking
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm font-medium" style={{ color: "#e2e8f0" }}>
                         {trip.pickupAddress}
                         <span style={{ color: "#475569" }}> → </span>

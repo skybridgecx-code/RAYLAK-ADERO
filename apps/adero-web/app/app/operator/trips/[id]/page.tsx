@@ -22,6 +22,13 @@ import {
   getValidTripTransitions,
   isAderoTripStatus,
 } from "@/lib/trip-lifecycle";
+import { getLatestEta } from "@/lib/eta";
+import {
+  getActiveTrackingSession,
+  getLatestLocation,
+} from "@/lib/tracking";
+import { LocationTracker } from "@/components/location-tracker";
+import { TrackingStatusBar } from "@/components/tracking-status-bar";
 import { TripStatusControls } from "./trip-status-controls";
 
 export const metadata: Metadata = {
@@ -58,6 +65,11 @@ function actorName(actor: {
 }): string {
   const fullName = [actor.firstName, actor.lastName].filter(Boolean).join(" ").trim();
   return fullName.length > 0 ? fullName : actor.email;
+}
+
+function toNumber(value: string | number | null | undefined): number {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
 }
 
 export default async function OperatorTripDetailPage({
@@ -105,21 +117,26 @@ export default async function OperatorTripDetailPage({
     throw new Error(`Unknown trip status: ${trip.status}`);
   }
 
-  const statusLogs = await db
-    .select({
-      id: aderoTripStatusLog.id,
-      fromStatus: aderoTripStatusLog.fromStatus,
-      toStatus: aderoTripStatusLog.toStatus,
-      note: aderoTripStatusLog.note,
-      createdAt: aderoTripStatusLog.createdAt,
-      changedByFirstName: aderoUsers.firstName,
-      changedByLastName: aderoUsers.lastName,
-      changedByEmail: aderoUsers.email,
-    })
-    .from(aderoTripStatusLog)
-    .innerJoin(aderoUsers, eq(aderoTripStatusLog.changedBy, aderoUsers.id))
-    .where(eq(aderoTripStatusLog.tripId, trip.id))
-    .orderBy(desc(aderoTripStatusLog.createdAt));
+  const [statusLogs, latestLocation, latestEta, activeSession] = await Promise.all([
+    db
+      .select({
+        id: aderoTripStatusLog.id,
+        fromStatus: aderoTripStatusLog.fromStatus,
+        toStatus: aderoTripStatusLog.toStatus,
+        note: aderoTripStatusLog.note,
+        createdAt: aderoTripStatusLog.createdAt,
+        changedByFirstName: aderoUsers.firstName,
+        changedByLastName: aderoUsers.lastName,
+        changedByEmail: aderoUsers.email,
+      })
+      .from(aderoTripStatusLog)
+      .innerJoin(aderoUsers, eq(aderoTripStatusLog.changedBy, aderoUsers.id))
+      .where(eq(aderoTripStatusLog.tripId, trip.id))
+      .orderBy(desc(aderoTripStatusLog.createdAt)),
+    getLatestLocation(trip.id),
+    getLatestEta(trip.id),
+    getActiveTrackingSession(trip.id),
+  ]);
 
   const statusStyle = TRIP_STATUS_STYLES[trip.status] ?? TRIP_STATUS_STYLES.assigned;
   const validNextStatuses = getValidTripTransitions(trip.status);
@@ -129,6 +146,7 @@ export default async function OperatorTripDetailPage({
   const serviceTypeLabel =
     ADERO_SERVICE_TYPE_LABELS[trip.requestServiceType as AderoServiceType] ??
     trip.requestServiceType;
+  const isTripEnded = trip.status === "completed" || trip.status === "canceled";
 
   return (
     <div className="space-y-6">
@@ -155,6 +173,57 @@ export default async function OperatorTripDetailPage({
           {ADERO_TRIP_STATUS_LABELS[trip.status]}
         </span>
       </div>
+
+      <TrackingStatusBar
+        tripId={trip.id}
+        tripStatus={trip.status}
+        isTracking={Boolean(activeSession)}
+        lastLocation={
+          latestLocation
+            ? {
+                latitude: toNumber(latestLocation.latitude),
+                longitude: toNumber(latestLocation.longitude),
+                recordedAt: latestLocation.recordedAt.toISOString(),
+              }
+            : null
+        }
+        eta={
+          latestEta
+            ? {
+                status: latestEta.status,
+                estimatedDurationMinutes: latestEta.estimatedDurationMinutes,
+                distanceRemainingMiles:
+                  latestEta.distanceRemainingMiles === null
+                    ? null
+                    : toNumber(latestEta.distanceRemainingMiles),
+              }
+            : null
+        }
+      />
+
+      {!isTripEnded && (
+        <div
+          className="rounded-xl border p-5"
+          style={{
+            borderColor: "rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[2px]" style={{ color: "#475569" }}>
+            Location Tracking
+          </p>
+          <p className="mt-1 text-xs" style={{ color: "#64748b" }}>
+            Share live operator location updates and ETA telemetry for this trip.
+          </p>
+          <div className="mt-4">
+            <LocationTracker
+              tripId={trip.id}
+              tripStatus={trip.status}
+              operatorUserId={trip.operatorId}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[2fr,1fr]">
         <div

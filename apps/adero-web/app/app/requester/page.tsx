@@ -240,6 +240,8 @@ export default async function RequesterDashboardPage() {
               const serviceLabel =
                 ADERO_SERVICE_TYPE_LABELS[req.serviceType as AderoServiceType] ??
                 req.serviceType;
+              const showQuoteLink =
+                req.status === "submitted" || req.status === "matched";
 
               return (
                 <div
@@ -281,9 +283,20 @@ export default async function RequesterDashboardPage() {
                         </p>
                       )}
                     </div>
-                    <p className="shrink-0 text-[11px]" style={{ color: "#334155" }}>
-                      {fmtDatetime(req.createdAt)}
-                    </p>
+                    <div className="shrink-0 space-y-1 text-right">
+                      <p className="text-[11px]" style={{ color: "#334155" }}>
+                        {fmtDatetime(req.createdAt)}
+                      </p>
+                      {showQuoteLink && (
+                        <Link
+                          href={`/app/requester/request/${req.id}/quote`}
+                          className="text-xs transition-opacity hover:opacity-80"
+                          style={{ color: "#a5b4fc" }}
+                        >
+                          View Quote →
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

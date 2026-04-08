@@ -3,6 +3,7 @@
 import { aderoRequests, db } from "@raylak/db";
 import { requireAderoRole } from "@/lib/auth";
 import { dispatchRequest } from "@/lib/dispatch";
+import { createQuoteForRequest } from "@/lib/pricing";
 import { RequestCreationSchema } from "@/lib/validators";
 
 export type RequestActionState = {
@@ -69,6 +70,12 @@ export async function createRequest(
       .returning({ id: aderoRequests.id });
 
     if (!request) throw new Error("Insert returned no row.");
+
+    try {
+      await createQuoteForRequest(request.id, { sendImmediately: true });
+    } catch (quoteErr) {
+      console.error("[adero] createQuoteForRequest failed:", quoteErr);
+    }
 
     let dispatchedOffers = 0;
     try {

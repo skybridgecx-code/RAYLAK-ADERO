@@ -22,3 +22,4 @@ export * from "./adero-operator-availability";
 export * from "./adero-request-offers";
 export * from "./adero-notifications";
 export * from "./adero-pricing";
+export * from "./adero-tracking";

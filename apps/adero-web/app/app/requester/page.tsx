@@ -89,13 +89,22 @@ export default async function RequesterDashboardPage() {
             Your Adero requester dashboard.
           </p>
         </div>
-        <Link
-          href="/app/requester/request/new"
-          className="rounded-lg px-4 py-2 text-sm font-medium"
-          style={{ background: "#6366f1", color: "#fff" }}
-        >
-          + New Request
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/app/requester/invoices"
+            className="rounded-lg px-4 py-2 text-sm font-medium"
+            style={{ background: "rgba(99,102,241,0.18)", color: "#c7d2fe" }}
+          >
+            View Invoices
+          </Link>
+          <Link
+            href="/app/requester/request/new"
+            className="rounded-lg px-4 py-2 text-sm font-medium"
+            style={{ background: "#6366f1", color: "#fff" }}
+          >
+            + New Request
+          </Link>
+        </div>
       </div>
 
       {/* Summary cards */}

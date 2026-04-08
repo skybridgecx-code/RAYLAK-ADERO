@@ -108,13 +108,22 @@ export default async function OperatorDashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-light tracking-tight" style={{ color: "#f1f5f9" }}>
-          Welcome back{aderoUser.firstName ? `, ${aderoUser.firstName}` : ""}
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: "#64748b" }}>
-          Manage availability, respond to incoming offers, and run active trips.
-        </p>
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-light tracking-tight" style={{ color: "#f1f5f9" }}>
+            Welcome back{aderoUser.firstName ? `, ${aderoUser.firstName}` : ""}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: "#64748b" }}>
+            Manage availability, respond to incoming offers, and run active trips.
+          </p>
+        </div>
+        <Link
+          href="/app/operator/payments"
+          className="rounded-lg px-4 py-2 text-sm font-medium"
+          style={{ background: "rgba(99,102,241,0.18)", color: "#c7d2fe" }}
+        >
+          Payments & Earnings
+        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

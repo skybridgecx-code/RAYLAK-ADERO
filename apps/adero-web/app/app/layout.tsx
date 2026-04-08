@@ -21,17 +21,20 @@ function roleNavItems(role: AderoRole): { label: string; href: string }[] {
       return [
         { label: "Dashboard", href: "/app/requester" },
         { label: "New Request", href: "/app/requester/request/new" },
+        { label: "Invoices", href: "/app/requester/invoices" },
         { label: "Notifications", href: "/app/notifications" },
       ];
     case "operator":
       return [
         { label: "Dashboard", href: "/app/operator" },
+        { label: "Payments", href: "/app/operator/payments" },
         { label: "Notifications", href: "/app/notifications" },
       ];
     case "company":
       return [
         { label: "Dashboard", href: "/app/company" },
         { label: "New Request", href: "/app/company/request/new" },
+        { label: "Invoices", href: "/app/requester/invoices" },
         { label: "Notifications", href: "/app/notifications" },
       ];
     case "admin":

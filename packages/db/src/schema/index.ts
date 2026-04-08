@@ -16,3 +16,5 @@ export * from "./adero-portal-submissions";
 export * from "./adero-member-notes";
 export * from "./adero-users";
 export * from "./adero-requests";
+export * from "./adero-trips";
+export * from "./adero-trip-status-log";

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAderoUser } from "@/lib/auth";
-import { db, aderoRequests } from "@raylak/db";
+import { db, aderoRequests, aderoTrips } from "@raylak/db";
 import {
   ADERO_REQUEST_STATUS_LABELS,
   ADERO_SERVICE_TYPE_LABELS,
+  ADERO_TRIP_STATUS_LABELS,
   type AderoRequestStatus,
   type AderoServiceType,
+  type AderoTripStatus,
 } from "@raylak/db/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -26,6 +28,15 @@ const STATUS_STYLES: Record<AderoRequestStatus, { bg: string; color: string }> =
   canceled: { bg: "rgba(239,68,68,0.1)", color: "#f87171" },
 };
 
+const TRIP_STATUS_STYLES: Record<AderoTripStatus, { bg: string; color: string }> = {
+  assigned: { bg: "rgba(99,102,241,0.12)", color: "#818cf8" },
+  operator_en_route: { bg: "rgba(59,130,246,0.12)", color: "#60a5fa" },
+  operator_arrived: { bg: "rgba(20,184,166,0.12)", color: "#2dd4bf" },
+  in_progress: { bg: "rgba(34,197,94,0.12)", color: "#4ade80" },
+  completed: { bg: "rgba(100,116,139,0.12)", color: "#94a3b8" },
+  canceled: { bg: "rgba(239,68,68,0.1)", color: "#f87171" },
+};
+
 function fmtDatetime(date: Date) {
   return date.toLocaleDateString("en-US", {
     month: "short",
@@ -39,16 +50,32 @@ function fmtDatetime(date: Date) {
 export default async function RequesterDashboardPage() {
   const aderoUser = await requireAderoUser();
 
-  const requests = await db
-    .select()
-    .from(aderoRequests)
-    .where(eq(aderoRequests.requesterId, aderoUser.id))
-    .orderBy(desc(aderoRequests.createdAt));
+  const [requests, trips] = await Promise.all([
+    db
+      .select()
+      .from(aderoRequests)
+      .where(eq(aderoRequests.requesterId, aderoUser.id))
+      .orderBy(desc(aderoRequests.createdAt)),
+    db
+      .select({
+        id: aderoTrips.id,
+        requestId: aderoTrips.requestId,
+        status: aderoTrips.status,
+        pickupAddress: aderoTrips.pickupAddress,
+        dropoffAddress: aderoTrips.dropoffAddress,
+        scheduledAt: aderoTrips.scheduledAt,
+        createdAt: aderoTrips.createdAt,
+      })
+      .from(aderoTrips)
+      .innerJoin(aderoRequests, eq(aderoTrips.requestId, aderoRequests.id))
+      .where(eq(aderoRequests.requesterId, aderoUser.id))
+      .orderBy(desc(aderoTrips.createdAt)),
+  ]);
 
-  const activeRequests = requests.filter(
-    (r) => r.status !== "completed" && r.status !== "canceled",
+  const activeTrips = trips.filter(
+    (trip) => trip.status !== "completed" && trip.status !== "canceled",
   );
-  const completedRequests = requests.filter((r) => r.status === "completed");
+  const completedTrips = trips.filter((trip) => trip.status === "completed");
 
   return (
     <div className="space-y-8">
@@ -75,14 +102,14 @@ export default async function RequesterDashboardPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           {
-            label: "Active Requests",
-            value: activeRequests.length,
-            color: activeRequests.length > 0 ? "#818cf8" : "#334155",
+            label: "Active Trips",
+            value: activeTrips.length,
+            color: activeTrips.length > 0 ? "#818cf8" : "#334155",
           },
           {
             label: "Completed Trips",
-            value: completedRequests.length,
-            color: completedRequests.length > 0 ? "#4ade80" : "#334155",
+            value: completedTrips.length,
+            color: completedTrips.length > 0 ? "#4ade80" : "#334155",
           },
           {
             label: "Total Requests",
@@ -106,6 +133,72 @@ export default async function RequesterDashboardPage() {
             </p>
           </div>
         ))}
+      </div>
+
+      {/* Active trip tracking */}
+      <div className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-[3px]" style={{ color: "#475569" }}>
+          Active Trips
+        </h2>
+        {activeTrips.length === 0 ? (
+          <div
+            className="rounded-xl border px-5 py-4"
+            style={{
+              borderColor: "rgba(255,255,255,0.07)",
+              background: "rgba(255,255,255,0.02)",
+            }}
+          >
+            <p className="text-xs" style={{ color: "#64748b" }}>
+              No active trips yet. Once an operator is assigned, tracking links will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activeTrips.map((trip) => {
+              const status = trip.status as AderoTripStatus;
+              const statusStyle =
+                TRIP_STATUS_STYLES[status] ?? TRIP_STATUS_STYLES.assigned;
+              const statusLabel = ADERO_TRIP_STATUS_LABELS[status] ?? trip.status;
+
+              return (
+                <div
+                  key={trip.id}
+                  className="rounded-xl border p-4"
+                  style={{
+                    borderColor: "rgba(255,255,255,0.07)",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <span
+                        className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                        style={statusStyle}
+                      >
+                        {statusLabel}
+                      </span>
+                      <p className="text-sm font-medium" style={{ color: "#e2e8f0" }}>
+                        {trip.pickupAddress}
+                        <span style={{ color: "#475569" }}> → </span>
+                        {trip.dropoffAddress}
+                      </p>
+                      <p className="text-xs" style={{ color: "#475569" }}>
+                        Scheduled: {trip.scheduledAt ? fmtDatetime(trip.scheduledAt) : "TBD"}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/app/requester/trips/${trip.id}`}
+                      className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium"
+                      style={{ background: "rgba(99,102,241,0.16)", color: "#a5b4fc" }}
+                    >
+                      Track →
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Request list */}

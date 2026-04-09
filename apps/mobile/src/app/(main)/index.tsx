@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, Switch, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Button } from "@/components/Button";
@@ -28,11 +28,18 @@ type Offer = {
 };
 
 type TripRecord = {
+  id: string;
   status: string;
 };
 
 type RequesterTripListItem = {
   trip: TripRecord;
+};
+
+type AvailabilityPayload = {
+  userId: string;
+  availabilityStatus: "available" | "busy" | "offline";
+  serviceArea?: string | null;
 };
 
 export default function HomeScreen() {
@@ -63,13 +70,25 @@ export default function HomeScreen() {
         const token = await getToken();
         const payload = await apiClient<MePayload>("me", { token });
         setMeData(payload);
-        if (payload.availabilityStatus) {
-          setAvailabilityStatus(payload.availabilityStatus);
-        }
 
         if ((payload.user?.role ?? "") === "operator") {
-          const offers = await apiClient<Offer[]>("offers", { token });
+          const [availability, offers, trips] = await Promise.all([
+            apiClient<AvailabilityPayload>("operator/availability", { token }).catch(() => null),
+            apiClient<Offer[]>("offers", { token }),
+            apiClient<Array<TripRecord | RequesterTripListItem>>("trips", { token }).catch(() => []),
+          ]);
+          if (availability?.availabilityStatus) {
+            setAvailabilityStatus(availability.availabilityStatus);
+          }
           setPendingOffersCount(offers.filter((offer) => offer.status === "pending").length);
+          const activeStatuses = new Set(["assigned", "operator_en_route", "operator_arrived", "in_progress"]);
+          const count = trips.filter((item) => {
+            if (typeof item === "object" && item !== null && "trip" in item) {
+              return activeStatuses.has((item as RequesterTripListItem).trip.status);
+            }
+            return activeStatuses.has((item as TripRecord).status);
+          }).length;
+          setActiveTripsCount(count);
         }
 
         if ((payload.user?.role ?? "") === "requester" || (payload.user?.role ?? "") === "company") {
@@ -168,7 +187,21 @@ export default function HomeScreen() {
                 trackColor={{ false: "#475569", true: colors.primary }}
               />
             </View>
-            <Text style={{ color: colors.textSecondary }}>Pending offers: {pendingOffersCount}</Text>
+            <Pressable onPress={() => router.push("/(main)/offers")}>
+              <Card style={{ padding: spacing.md }}>
+                <Text style={{ color: colors.text, fontSize: fontSize.md, fontWeight: "600" }}>
+                  Pending offers: {pendingOffersCount}
+                </Text>
+                <Text style={{ color: colors.textSecondary, fontSize: fontSize.sm }}>
+                  Tap to review incoming offers
+                </Text>
+              </Card>
+            </Pressable>
+            <Button
+              title={activeTripsCount > 0 ? `View Active Trips (${activeTripsCount})` : "View Active Trips"}
+              onPress={() => router.push("/(main)/trips")}
+              variant="secondary"
+            />
           </Card>
         ) : null}
       </ScrollView>

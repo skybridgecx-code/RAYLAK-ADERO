@@ -28,6 +28,12 @@ type RequesterTrip = {
   };
 };
 
+type MePayload = {
+  user?: {
+    role?: string;
+  };
+};
+
 function getStatusColors(status: string) {
   const key = status.toLowerCase();
   if (key.includes("completed") || key.includes("paid")) return { color: colors.success, bgColor: "rgba(74,222,128,0.18)" };
@@ -40,6 +46,7 @@ export default function TripsScreen() {
   const router = useRouter();
   const { isLoaded, isSignedIn, getToken } = useAderoAuth();
   const [trips, setTrips] = useState<Array<Trip | RequesterTrip>>([]);
+  const [role, setRole] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -49,9 +56,14 @@ export default function TripsScreen() {
       setIsLoading(true);
       try {
         const token = await getToken();
-        const data = await apiClient<Array<Trip | RequesterTrip>>("trips", { token });
+        const [me, data] = await Promise.all([
+          apiClient<MePayload>("me", { token }).catch(() => null),
+          apiClient<Array<Trip | RequesterTrip>>("trips", { token }),
+        ]);
+        setRole(me?.user?.role ?? null);
         setTrips(data);
       } catch {
+        setRole(null);
         setTrips([]);
       } finally {
         setIsLoading(false);
@@ -62,6 +74,25 @@ export default function TripsScreen() {
   }, [getToken, isSignedIn]);
 
   const hasTrips = useMemo(() => trips.length > 0, [trips.length]);
+
+  const nextActionHint = (status: string) => {
+    if (status === "assigned") {
+      return "Tap to start route";
+    }
+    if (status === "operator_en_route") {
+      return "En route to pickup";
+    }
+    if (status === "operator_arrived") {
+      return "Waiting at pickup";
+    }
+    if (status === "in_progress") {
+      return "Trip in progress";
+    }
+    if (status === "completed") {
+      return "Completed";
+    }
+    return null;
+  };
 
   if (!isLoaded || isLoading) {
     return <LoadingScreen />;
@@ -86,7 +117,7 @@ export default function TripsScreen() {
             return (
               <Pressable
                 key={normalizedTrip.id}
-                onPress={() => router.push(`/(main)/trip/${normalizedTrip.id}`)}
+                onPress={() => router.push(role === "operator" ? `/(main)/operator-trip/${normalizedTrip.id}` : `/(main)/trip/${normalizedTrip.id}`)}
               >
                 <Card>
                   <StatusBadge
@@ -99,6 +130,11 @@ export default function TripsScreen() {
                   {dateValue ? (
                     <Text style={{ color: colors.textMuted, fontSize: fontSize.xs }}>
                       {new Date(dateValue).toLocaleString()}
+                    </Text>
+                  ) : null}
+                  {role === "operator" && nextActionHint(normalizedTrip.status) ? (
+                    <Text style={{ color: colors.primary, fontSize: fontSize.sm, fontWeight: "600" }}>
+                      {nextActionHint(normalizedTrip.status)}
                     </Text>
                   ) : null}
                 </Card>

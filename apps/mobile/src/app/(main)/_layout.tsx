@@ -29,6 +29,7 @@ export default function MainLayout() {
           const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
             index: "home-outline",
             requests: "document-text-outline",
+            offers: "briefcase-outline",
             trips: "car-outline",
             notifications: "notifications-outline",
             profile: "person-outline",
@@ -40,11 +41,14 @@ export default function MainLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "Home" }} />
       <Tabs.Screen name="requests" options={{ title: "Requests" }} />
+      <Tabs.Screen name="offers" options={{ title: "Offers" }} />
       <Tabs.Screen name="trips" options={{ title: "Trips" }} />
       <Tabs.Screen name="notifications" options={{ title: "Notifications" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
       <Tabs.Screen name="request/new" options={{ href: null }} />
       <Tabs.Screen name="request/[id]" options={{ href: null }} />
+      <Tabs.Screen name="offer/[id]" options={{ href: null }} />
+      <Tabs.Screen name="operator-trip/[id]" options={{ href: null }} />
       <Tabs.Screen name="trip/[id]" options={{ href: null }} />
       <Tabs.Screen name="trip/[id]/rate" options={{ href: null }} />
     </Tabs>

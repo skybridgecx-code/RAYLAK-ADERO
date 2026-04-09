@@ -1,4 +1,16 @@
 import { z } from "zod";
+import {
+  ADERO_RATING_MIN,
+  ADERO_RATING_MAX,
+  ADERO_DISPUTE_CATEGORIES,
+  ADERO_DISPUTE_STATUSES,
+  ADERO_DISPUTE_PRIORITIES,
+  ADERO_INCIDENT_SEVERITIES,
+  ADERO_INCIDENT_CATEGORIES,
+  ADERO_INCIDENT_STATUSES,
+  ADERO_RATING_ROLES,
+  ADERO_PENALTY_TYPES,
+} from "@raylak/shared";
 
 // ─── Company application ──────────────────────────────────────────────────────
 
@@ -266,3 +278,99 @@ export const etaCalculationSchema = z.object({
   currentSpeedMph: z.number().min(0).nullable().optional(),
   destinationType: z.enum(["pickup", "dropoff"]),
 });
+
+
+const scoreField = z
+  .number()
+  .int()
+  .min(ADERO_RATING_MIN)
+  .max(ADERO_RATING_MAX);
+
+export const createRatingSchema = z.object({
+  tripId: z.string().uuid(),
+  rateeUserId: z.string().uuid(),
+  raterRole: z.enum(ADERO_RATING_ROLES),
+  overallScore: scoreField,
+  punctualityScore: scoreField.optional(),
+  professionalismScore: scoreField.optional(),
+  vehicleConditionScore: scoreField.optional(),
+  communicationScore: scoreField.optional(),
+  comment: z.string().max(2000).optional(),
+});
+
+export type CreateRatingInput = z.infer<typeof createRatingSchema>;
+
+export const createDisputeSchema = z.object({
+  tripId: z.string().uuid(),
+  filedAgainstUserId: z.string().uuid().optional(),
+  category: z.enum(ADERO_DISPUTE_CATEGORIES),
+  priority: z.enum(ADERO_DISPUTE_PRIORITIES).optional(),
+  subject: z.string().min(1).max(255),
+  description: z.string().min(10).max(5000),
+});
+
+export type CreateDisputeInput = z.infer<typeof createDisputeSchema>;
+
+export const updateDisputeStatusSchema = z.object({
+  disputeId: z.string().uuid(),
+  status: z.enum(ADERO_DISPUTE_STATUSES),
+  resolution: z.string().max(5000).optional(),
+});
+
+export type UpdateDisputeStatusInput = z.infer<
+  typeof updateDisputeStatusSchema
+>;
+
+export const createDisputeMessageSchema = z.object({
+  disputeId: z.string().uuid(),
+  message: z.string().min(1).max(5000),
+  attachmentUrl: z.string().url().optional(),
+});
+
+export type CreateDisputeMessageInput = z.infer<
+  typeof createDisputeMessageSchema
+>;
+
+export const createIncidentSchema = z.object({
+  tripId: z.string().uuid().optional(),
+  severity: z.enum(ADERO_INCIDENT_SEVERITIES),
+  category: z.enum(ADERO_INCIDENT_CATEGORIES),
+  title: z.string().min(1).max(255),
+  description: z.string().min(10).max(5000),
+  location: z.string().max(500).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+});
+
+export type CreateIncidentInput = z.infer<typeof createIncidentSchema>;
+
+export const updateIncidentStatusSchema = z.object({
+  incidentId: z.string().uuid(),
+  status: z.enum(ADERO_INCIDENT_STATUSES),
+  adminNotes: z.string().max(5000).optional(),
+});
+
+export type UpdateIncidentStatusInput = z.infer<
+  typeof updateIncidentStatusSchema
+>;
+
+export const createCancelPenaltySchema = z.object({
+  tripId: z.string().uuid().optional(),
+  requestId: z.string().uuid(),
+  userId: z.string().uuid(),
+  cancelledByRole: z.enum(ADERO_RATING_ROLES),
+  reason: z.string().max(2000).optional(),
+  penaltyType: z.enum(ADERO_PENALTY_TYPES).optional(),
+  penaltyAmount: z.number().min(0).optional(),
+});
+
+export type CreateCancelPenaltyInput = z.infer<
+  typeof createCancelPenaltySchema
+>;
+
+export const waivePenaltySchema = z.object({
+  penaltyId: z.string().uuid(),
+  waivedReason: z.string().min(1).max(2000),
+});
+
+export type WaivePenaltyInput = z.infer<typeof waivePenaltySchema>;

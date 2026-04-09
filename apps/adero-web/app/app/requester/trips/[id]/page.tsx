@@ -19,7 +19,10 @@ import {
 } from "@raylak/db/schema";
 import { requireAderoRole } from "@/lib/auth";
 import { isAderoTripStatus } from "@/lib/trip-lifecycle";
+import { getRatingsForTrip, hasUserRatedTrip } from "@/lib/ratings";
 import { TripTrackingView } from "@/components/trip-tracking-view";
+import { RatingForm } from "@/components/rating-form";
+import { RatingDisplay } from "@/components/rating-display";
 
 export const metadata: Metadata = {
   title: "Trip Tracking - Adero",
@@ -38,7 +41,7 @@ const TRIP_STATUS_STYLES: Record<AderoTripStatus, { bg: string; color: string }>
 };
 
 function fmtDatetime(date: Date | null): string {
-  if (!date) return "—";
+  if (!date) return "\u2014";
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -71,6 +74,7 @@ export default async function RequesterTripTrackingPage({
     .select({
       id: aderoTrips.id,
       requestId: aderoTrips.requestId,
+      operatorId: aderoTrips.operatorId,
       status: aderoTrips.status,
       pickupAddress: aderoTrips.pickupAddress,
       dropoffAddress: aderoTrips.dropoffAddress,
@@ -103,24 +107,28 @@ export default async function RequesterTripTrackingPage({
   }
 
   if (!isAderoTripStatus(trip.status)) {
-    throw new Error(`Unknown trip status: ${trip.status}`);
+    throw new Error("Unknown trip status: " + trip.status);
   }
 
-  const statusLogs = await db
-    .select({
-      id: aderoTripStatusLog.id,
-      fromStatus: aderoTripStatusLog.fromStatus,
-      toStatus: aderoTripStatusLog.toStatus,
-      note: aderoTripStatusLog.note,
-      createdAt: aderoTripStatusLog.createdAt,
-      changedByFirstName: aderoUsers.firstName,
-      changedByLastName: aderoUsers.lastName,
-      changedByEmail: aderoUsers.email,
-    })
-    .from(aderoTripStatusLog)
-    .innerJoin(aderoUsers, eq(aderoTripStatusLog.changedBy, aderoUsers.id))
-    .where(eq(aderoTripStatusLog.tripId, trip.id))
-    .orderBy(desc(aderoTripStatusLog.createdAt));
+  const [statusLogs, tripRatings, alreadyRated] = await Promise.all([
+    db
+      .select({
+        id: aderoTripStatusLog.id,
+        fromStatus: aderoTripStatusLog.fromStatus,
+        toStatus: aderoTripStatusLog.toStatus,
+        note: aderoTripStatusLog.note,
+        createdAt: aderoTripStatusLog.createdAt,
+        changedByFirstName: aderoUsers.firstName,
+        changedByLastName: aderoUsers.lastName,
+        changedByEmail: aderoUsers.email,
+      })
+      .from(aderoTripStatusLog)
+      .innerJoin(aderoUsers, eq(aderoTripStatusLog.changedBy, aderoUsers.id))
+      .where(eq(aderoTripStatusLog.tripId, trip.id))
+      .orderBy(desc(aderoTripStatusLog.createdAt)),
+    getRatingsForTrip(trip.id),
+    hasUserRatedTrip(trip.id, viewer.id),
+  ]);
 
   const statusStyle = TRIP_STATUS_STYLES[trip.status] ?? TRIP_STATUS_STYLES.assigned;
   const requestStatusLabel =
@@ -143,7 +151,7 @@ export default async function RequesterTripTrackingPage({
             className="text-xs transition-opacity hover:opacity-70"
             style={{ color: "#475569" }}
           >
-            ← Back to requester dashboard
+            \u2190 Back to requester dashboard
           </Link>
           <h1 className="mt-2 text-2xl font-light tracking-tight" style={{ color: "#f1f5f9" }}>
             Track Trip #{trip.id.slice(0, 8)}
@@ -173,7 +181,7 @@ export default async function RequesterTripTrackingPage({
         <div className="mt-3 space-y-2 text-sm" style={{ color: "#cbd5e1" }}>
           <p>
             <span style={{ color: "#64748b" }}>Route:</span> {trip.pickupAddress}
-            <span style={{ color: "#475569" }}> → </span>
+            <span style={{ color: "#475569" }}> \u2192 </span>
             {trip.dropoffAddress}
           </p>
           <p>
@@ -216,6 +224,17 @@ export default async function RequesterTripTrackingPage({
         operatorName={operatorDisplayName}
       />
 
+      {trip.status === "completed" && !alreadyRated && trip.operatorId && (
+        <RatingForm
+          tripId={trip.id}
+          rateeUserId={trip.operatorId}
+          raterRole="requester"
+          rateeLabel="your operator"
+        />
+      )}
+
+      <RatingDisplay ratings={tripRatings} />
+
       <div
         className="rounded-xl border p-5"
         style={{
@@ -250,10 +269,10 @@ export default async function RequesterTripTrackingPage({
                   }}
                 >
                   <p className="text-sm" style={{ color: "#e2e8f0" }}>
-                    {fromLabel} → {toLabel}
+                    {fromLabel} \u2192 {toLabel}
                   </p>
                   <p className="mt-0.5 text-xs" style={{ color: "#64748b" }}>
-                    {fmtDatetime(entry.createdAt)} · by{" "}
+                    {fmtDatetime(entry.createdAt)} \u00b7 by{" "}
                     {actorName({
                       firstName: entry.changedByFirstName,
                       lastName: entry.changedByLastName,

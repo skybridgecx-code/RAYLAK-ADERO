@@ -27,8 +27,11 @@ import {
   getActiveTrackingSession,
   getLatestLocation,
 } from "@/lib/tracking";
+import { getRatingsForTrip, hasUserRatedTrip } from "@/lib/ratings";
 import { LocationTracker } from "@/components/location-tracker";
 import { TrackingStatusBar } from "@/components/tracking-status-bar";
+import { RatingForm } from "@/components/rating-form";
+import { RatingDisplay } from "@/components/rating-display";
 import { TripStatusControls } from "./trip-status-controls";
 
 export const metadata: Metadata = {
@@ -48,7 +51,7 @@ const TRIP_STATUS_STYLES: Record<AderoTripStatus, { bg: string; color: string }>
 };
 
 function fmtDatetime(date: Date | null): string {
-  if (!date) return "—";
+  if (!date) return "\u2014";
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -96,6 +99,7 @@ export default async function OperatorTripDetailPage({
       canceledAt: aderoTrips.canceledAt,
       cancelReason: aderoTrips.cancelReason,
       createdAt: aderoTrips.createdAt,
+      requesterId: aderoRequests.requesterId,
       requestPickupAt: aderoRequests.pickupAt,
       requestStatus: aderoRequests.status,
       requestServiceType: aderoRequests.serviceType,
@@ -114,10 +118,10 @@ export default async function OperatorTripDetailPage({
   }
 
   if (!isAderoTripStatus(trip.status)) {
-    throw new Error(`Unknown trip status: ${trip.status}`);
+    throw new Error("Unknown trip status: " + trip.status);
   }
 
-  const [statusLogs, latestLocation, latestEta, activeSession] = await Promise.all([
+  const [statusLogs, latestLocation, latestEta, activeSession, tripRatings, alreadyRated] = await Promise.all([
     db
       .select({
         id: aderoTripStatusLog.id,
@@ -136,6 +140,8 @@ export default async function OperatorTripDetailPage({
     getLatestLocation(trip.id),
     getLatestEta(trip.id),
     getActiveTrackingSession(trip.id),
+    getRatingsForTrip(trip.id),
+    hasUserRatedTrip(trip.id, actor.id),
   ]);
 
   const statusStyle = TRIP_STATUS_STYLES[trip.status] ?? TRIP_STATUS_STYLES.assigned;
@@ -157,7 +163,7 @@ export default async function OperatorTripDetailPage({
             className="text-xs transition-opacity hover:opacity-70"
             style={{ color: "#475569" }}
           >
-            ← Back to operator dashboard
+            \u2190 Back to operator dashboard
           </Link>
           <h1 className="mt-2 text-2xl font-light tracking-tight" style={{ color: "#f1f5f9" }}>
             Trip #{trip.id.slice(0, 8)}
@@ -239,7 +245,7 @@ export default async function OperatorTripDetailPage({
           <div className="mt-3 space-y-2 text-sm" style={{ color: "#cbd5e1" }}>
             <p>
               <span style={{ color: "#64748b" }}>Route:</span> {trip.pickupAddress}
-              <span style={{ color: "#475569" }}> → </span>
+              <span style={{ color: "#475569" }}> \u2192 </span>
               {trip.dropoffAddress}
             </p>
             <p>
@@ -278,6 +284,17 @@ export default async function OperatorTripDetailPage({
         <TripStatusControls tripId={trip.id} nextStatuses={validNextStatuses} />
       </div>
 
+      {trip.status === "completed" && !alreadyRated && (
+        <RatingForm
+          tripId={trip.id}
+          rateeUserId={trip.requesterId}
+          raterRole="operator"
+          rateeLabel="the requester"
+        />
+      )}
+
+      <RatingDisplay ratings={tripRatings} />
+
       <div
         className="rounded-xl border p-5"
         style={{
@@ -312,10 +329,10 @@ export default async function OperatorTripDetailPage({
                   }}
                 >
                   <p className="text-sm" style={{ color: "#e2e8f0" }}>
-                    {fromLabel} → {toLabel}
+                    {fromLabel} \u2192 {toLabel}
                   </p>
                   <p className="mt-0.5 text-xs" style={{ color: "#64748b" }}>
-                    {fmtDatetime(entry.createdAt)} · by{" "}
+                    {fmtDatetime(entry.createdAt)} \u00b7 by{" "}
                     {actorName({
                       firstName: entry.changedByFirstName,
                       lastName: entry.changedByLastName,

@@ -4,12 +4,19 @@ import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import {
   aderoOperatorLastLocations,
   aderoTrackingSessions,
+  aderoTripEtas,
   aderoTripLocations,
   aderoTrips,
   db,
 } from "@raylak/db";
 import { updateEtaOnLocationChange } from "./eta";
 import { calculateDistanceBetweenPoints } from "./geo-utils";
+import {
+  notifyOnEtaChange,
+  notifyOnGeofenceEvent,
+  notifyOnTrackingSessionEnd,
+  notifyOnTrackingSessionStart,
+} from "./tracking-notifications";
 export { MILES_PER_METER, calculateDistanceBetweenPoints } from "./geo-utils";
 
 export const MIN_LOCATION_INTERVAL_MS = 3000;
@@ -224,6 +231,12 @@ export async function startTrackingSession(
       },
     });
 
+  try {
+    await notifyOnTrackingSessionStart(tripId, operatorUserId);
+  } catch (error) {
+    console.error("[adero/tracking] Tracking session start notification failed:", error);
+  }
+
   return activeSession;
 }
 
@@ -276,6 +289,17 @@ export async function endTrackingSession(
 
   if (!updatedSession) {
     throw new Error("Failed to end tracking session.");
+  }
+
+  try {
+    await notifyOnTrackingSessionEnd(session.tripId, session.operatorUserId, {
+      locationCount: updatedSession.locationCount,
+      totalDistanceMiles: updatedSession.totalDistanceMiles
+        ? toNumber(updatedSession.totalDistanceMiles)
+        : null,
+    });
+  } catch (error) {
+    console.error("[adero/tracking] Tracking session end notification failed:", error);
   }
 
   return updatedSession;
@@ -421,6 +445,51 @@ export async function recordLocation(
       update.longitude,
       update.speed ?? null,
     );
+
+    if (etaUpdate.geofenceEvent) {
+      try {
+        await notifyOnGeofenceEvent({
+          tripId: session.tripId,
+          operatorUserId: session.operatorUserId,
+          eventType: etaUpdate.geofenceEvent.eventType,
+        });
+      } catch (error) {
+        console.error("[adero/tracking] Geofence notification failed:", error);
+      }
+    }
+
+    if (etaUpdate.eta) {
+      try {
+        const etaRows = await db
+          .select({
+            id: aderoTripEtas.id,
+            status: aderoTripEtas.status,
+            estimatedDurationMinutes: aderoTripEtas.estimatedDurationMinutes,
+          })
+          .from(aderoTripEtas)
+          .where(eq(aderoTripEtas.tripId, session.tripId))
+          .orderBy(desc(aderoTripEtas.createdAt))
+          .limit(2);
+
+        const previousEta = etaRows.find((row) => row.id !== etaUpdate.eta?.id) ?? null;
+
+        await notifyOnEtaChange(
+          session.tripId,
+          previousEta
+            ? {
+                status: previousEta.status,
+                estimatedDurationMinutes: previousEta.estimatedDurationMinutes,
+              }
+            : null,
+          {
+            status: etaUpdate.eta.status,
+            estimatedDurationMinutes: etaUpdate.eta.estimatedDurationMinutes,
+          },
+        );
+      } catch (error) {
+        console.error("[adero/tracking] ETA notification failed:", error);
+      }
+    }
 
     return {
       ...result,

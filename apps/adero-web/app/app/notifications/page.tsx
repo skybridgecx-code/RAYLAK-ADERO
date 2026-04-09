@@ -37,6 +37,17 @@ function parseMetadata(value: string | null): Record<string, string> | null {
   }
 }
 
+function formatNotificationType(type: string): string {
+  const customLabels: Record<string, string> = {
+    tracking_geofence: "📍 Location Alert",
+    tracking_eta: "⏱️ ETA Update",
+    tracking_session: "📡 Tracking",
+    tracking_stale: "⚠️ Signal Issue",
+  };
+
+  return customLabels[type] ?? type.replaceAll("_", " ");
+}
+
 export default async function NotificationsPage() {
   const aderoUser = await requireAderoUser();
 
@@ -124,7 +135,7 @@ export default async function NotificationsPage() {
                           color: "#94a3b8",
                         }}
                       >
-                        {item.type.replaceAll("_", " ")}
+                        {formatNotificationType(item.type)}
                       </span>
                       {isUnread && (
                         <span

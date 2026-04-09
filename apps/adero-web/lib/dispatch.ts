@@ -8,6 +8,8 @@ import {
   aderoRequests,
   aderoUsers,
 } from "@raylak/db";
+import { ADERO_TRUST_DISPATCH_MINIMUM } from "@raylak/shared";
+import { getTrustScore } from "./trust-score";
 import {
   notifyOfferReceived,
   notifyRequestMatched,
@@ -38,11 +40,6 @@ function serviceAreaMatchesRequest(
   return areaCandidates.some((candidate) => requestArea.includes(candidate));
 }
 
-/**
- * Dispatches a submitted/matched request to eligible available operators.
- *
- * Returns how many new offers were created.
- */
 export async function dispatchRequest(requestId: string): Promise<number> {
   const now = new Date();
   const result = await db.transaction(async (tx) => {
@@ -94,6 +91,36 @@ export async function dispatchRequest(requestId: string): Promise<number> {
       };
     }
 
+    const trustEvaluations = await Promise.all(
+      availableOperators.map(async (operator) => {
+        try {
+          const trustScore = await getTrustScore(operator.operatorId);
+          if (!trustScore) {
+            return { operatorId: operator.operatorId, eligible: true };
+          }
+
+          const overallScore = Number(trustScore.overallScore);
+          if (!Number.isFinite(overallScore)) {
+            return { operatorId: operator.operatorId, eligible: true };
+          }
+
+          return {
+            operatorId: operator.operatorId,
+            eligible: overallScore >= ADERO_TRUST_DISPATCH_MINIMUM,
+          };
+        } catch (error) {
+          console.error("[adero/dispatch] trust score lookup failed:", error);
+          return { operatorId: operator.operatorId, eligible: true };
+        }
+      }),
+    );
+
+    const trustEligibleOperatorIds = new Set(
+      trustEvaluations
+        .filter((entry) => entry.eligible)
+        .map((entry) => entry.operatorId),
+    );
+
     const availableOperatorIds = availableOperators.map((operator) => operator.operatorId);
 
     const existingOffers = await tx
@@ -112,6 +139,10 @@ export async function dispatchRequest(requestId: string): Promise<number> {
 
     const eligibleOperators = availableOperators.filter((operator) => {
       if (existingOperatorIds.has(operator.operatorId)) {
+        return false;
+      }
+
+      if (!trustEligibleOperatorIds.has(operator.operatorId)) {
         return false;
       }
 

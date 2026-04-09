@@ -11,6 +11,7 @@ import {
   type AderoTripStatus,
 } from "@raylak/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { CancelRequestButton } from "@/components/cancel-request-button";
 
 export const metadata: Metadata = {
   title: "Requester Dashboard - Adero",
@@ -86,7 +87,6 @@ export default async function RequesterDashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-light tracking-tight" style={{ color: "#f1f5f9" }}>
@@ -114,7 +114,6 @@ export default async function RequesterDashboardPage() {
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           {
@@ -151,7 +150,6 @@ export default async function RequesterDashboardPage() {
         ))}
       </div>
 
-      {/* Active trip tracking */}
       <div className="space-y-3">
         <h2 className="text-xs font-semibold uppercase tracking-[3px]" style={{ color: "#475569" }}>
           Active Trips
@@ -218,7 +216,6 @@ export default async function RequesterDashboardPage() {
         )}
       </div>
 
-      {/* Request list */}
       {requests.length === 0 ? (
         <div
           className="rounded-xl border px-5 py-12 text-center"
@@ -259,6 +256,8 @@ export default async function RequesterDashboardPage() {
                 req.serviceType;
               const showQuoteLink =
                 req.status === "submitted" || req.status === "matched";
+              const showCancelButton =
+                req.status !== "completed" && req.status !== "canceled";
 
               return (
                 <div
@@ -313,6 +312,7 @@ export default async function RequesterDashboardPage() {
                           View Quote →
                         </Link>
                       )}
+                      {showCancelButton && <CancelRequestButton requestId={req.id} />}
                     </div>
                   </div>
                 </div>

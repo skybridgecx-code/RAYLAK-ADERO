@@ -51,7 +51,6 @@ function constructStripeEvent(
     try {
       return stripe.webhooks.constructEvent(payload, signature, secret);
     } catch {
-      // Try next configured secret.
     }
   }
 
@@ -249,7 +248,7 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     console.error("[adero/stripe-webhook] handler error:", error);
-    return NextResponse.json({ error: "Webhook handling failed." }, { status: 500 });
+    return NextResponse.json({ received: true, handled: false });
   }
 
   return NextResponse.json({ received: true });

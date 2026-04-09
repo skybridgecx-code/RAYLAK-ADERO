@@ -23,6 +23,8 @@ import { getRatingsForTrip, hasUserRatedTrip } from "@/lib/ratings";
 import { TripTrackingView } from "@/components/trip-tracking-view";
 import { RatingForm } from "@/components/rating-form";
 import { RatingDisplay } from "@/components/rating-display";
+import { DisputeForm } from "@/components/dispute-form";
+import { IncidentForm } from "@/components/incident-form";
 
 export const metadata: Metadata = {
   title: "Trip Tracking - Adero",
@@ -234,6 +236,21 @@ export default async function RequesterTripTrackingPage({
       )}
 
       <RatingDisplay ratings={tripRatings} />
+
+      {(trip.status === "completed" || trip.status === "canceled") && (
+        <div className="space-y-4">
+          <p
+            className="text-xs font-semibold uppercase tracking-[2px]"
+            style={{ color: "#475569" }}
+          >
+            Report Issue
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DisputeForm tripId={trip.id} filedAgainstUserId={trip.operatorId ?? undefined} />
+            <IncidentForm tripId={trip.id} />
+          </div>
+        </div>
+      )}
 
       <div
         className="rounded-xl border p-5"

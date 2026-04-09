@@ -32,6 +32,8 @@ import { LocationTracker } from "@/components/location-tracker";
 import { TrackingStatusBar } from "@/components/tracking-status-bar";
 import { RatingForm } from "@/components/rating-form";
 import { RatingDisplay } from "@/components/rating-display";
+import { DisputeForm } from "@/components/dispute-form";
+import { IncidentForm } from "@/components/incident-form";
 import { TripStatusControls } from "./trip-status-controls";
 
 export const metadata: Metadata = {
@@ -294,6 +296,21 @@ export default async function OperatorTripDetailPage({
       )}
 
       <RatingDisplay ratings={tripRatings} />
+
+      {(trip.status === "completed" || trip.status === "canceled") && (
+        <div className="space-y-4">
+          <p
+            className="text-xs font-semibold uppercase tracking-[2px]"
+            style={{ color: "#475569" }}
+          >
+            Report Issue
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DisputeForm tripId={trip.id} filedAgainstUserId={trip.requesterId} />
+            <IncidentForm tripId={trip.id} />
+          </div>
+        </div>
+      )}
 
       <div
         className="rounded-xl border p-5"

@@ -6,9 +6,24 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0e1a"
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#818cf8"
+    },
     "newArchEnabled": true,
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "placeholder-project-id"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.adero.mobile",
@@ -20,6 +35,10 @@
       }
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0e1a"
+      },
       "package": "com.adero.mobile",
       "permissions": [
         "ACCESS_COARSE_LOCATION",

@@ -53,6 +53,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               Dispatch
             </Link>
             <Link
+              href="/admin/tracking"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              Fleet Tracking
+            </Link>
+            <Link
               href="/admin/pricing"
               className="text-xs font-medium transition-colors"
               style={{ color: "rgba(255,255,255,0.55)" }}

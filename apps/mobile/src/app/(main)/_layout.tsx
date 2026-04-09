@@ -47,6 +47,14 @@ export default function MainLayout() {
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
       <Tabs.Screen name="request/new" options={{ href: null }} />
       <Tabs.Screen name="request/[id]" options={{ href: null }} />
+      <Tabs.Screen name="invoices" options={{ href: null }} />
+      <Tabs.Screen name="invoice/[id]" options={{ href: null }} />
+      <Tabs.Screen name="disputes" options={{ href: null }} />
+      <Tabs.Screen name="dispute/new" options={{ href: null }} />
+      <Tabs.Screen name="dispute/[id]" options={{ href: null }} />
+      <Tabs.Screen name="incidents" options={{ href: null }} />
+      <Tabs.Screen name="incident/new" options={{ href: null }} />
+      <Tabs.Screen name="incident/[id]" options={{ href: null }} />
       <Tabs.Screen name="offer/[id]" options={{ href: null }} />
       <Tabs.Screen name="operator-trip/[id]" options={{ href: null }} />
       <Tabs.Screen name="trip/[id]" options={{ href: null }} />

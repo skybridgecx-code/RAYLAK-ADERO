@@ -13,14 +13,19 @@ type Trip = {
   id: string;
   status: string;
   createdAt?: string;
+  requestId?: string;
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  pickupAt?: string;
+};
+
+type RequesterTrip = {
+  trip: Trip;
   request?: {
     pickupAddress?: string;
     dropoffAddress?: string;
     pickupAt?: string;
   };
-  pickupAddress?: string;
-  dropoffAddress?: string;
-  pickupAt?: string;
 };
 
 function getStatusColors(status: string) {
@@ -34,7 +39,7 @@ function getStatusColors(status: string) {
 export default function TripsScreen() {
   const router = useRouter();
   const { isLoaded, isSignedIn, getToken } = useAderoAuth();
-  const [trips, setTrips] = useState<Trip[]>([]);
+  const [trips, setTrips] = useState<Array<Trip | RequesterTrip>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -44,7 +49,7 @@ export default function TripsScreen() {
       setIsLoading(true);
       try {
         const token = await getToken();
-        const data = await apiClient<Trip[]>("trips", { token });
+        const data = await apiClient<Array<Trip | RequesterTrip>>("trips", { token });
         setTrips(data);
       } catch {
         setTrips([]);
@@ -72,15 +77,20 @@ export default function TripsScreen() {
           </Card>
         ) : (
           trips.map((trip) => {
-            const colorsForStatus = getStatusColors(trip.status);
-            const pickup = trip.request?.pickupAddress ?? trip.pickupAddress ?? "Unknown pickup";
-            const dropoff = trip.request?.dropoffAddress ?? trip.dropoffAddress ?? "Unknown dropoff";
-            const dateValue = trip.request?.pickupAt ?? trip.pickupAt ?? trip.createdAt;
+            const normalizedTrip = "trip" in trip ? trip.trip : trip;
+            const request = "trip" in trip ? trip.request : undefined;
+            const colorsForStatus = getStatusColors(normalizedTrip.status);
+            const pickup = request?.pickupAddress ?? normalizedTrip.pickupAddress ?? "Unknown pickup";
+            const dropoff = request?.dropoffAddress ?? normalizedTrip.dropoffAddress ?? "Unknown dropoff";
+            const dateValue = request?.pickupAt ?? normalizedTrip.pickupAt ?? normalizedTrip.createdAt;
             return (
-              <Pressable key={trip.id} onPress={() => router.push(`/(main)/trip/${trip.id}`)}>
+              <Pressable
+                key={normalizedTrip.id}
+                onPress={() => router.push(`/(main)/trip/${normalizedTrip.id}`)}
+              >
                 <Card>
                   <StatusBadge
-                    label={trip.status.replaceAll("_", " ")}
+                    label={normalizedTrip.status.replaceAll("_", " ")}
                     color={colorsForStatus.color}
                     bgColor={colorsForStatus.bgColor}
                   />

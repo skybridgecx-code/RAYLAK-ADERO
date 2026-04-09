@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -18,8 +19,6 @@ type MePayload = {
   trustScore?: {
     overallScore?: number | null;
   } | null;
-  activeTripsCount?: number;
-  pendingOffersCount?: number;
   availabilityStatus?: "available" | "busy" | "offline";
 };
 
@@ -28,10 +27,20 @@ type Offer = {
   status: string;
 };
 
+type TripRecord = {
+  status: string;
+};
+
+type RequesterTripListItem = {
+  trip: TripRecord;
+};
+
 export default function HomeScreen() {
+  const router = useRouter();
   const { isLoaded, isSignedIn, getToken, user } = useAderoAuth();
   const [meData, setMeData] = useState<MePayload | null>(null);
   const [pendingOffersCount, setPendingOffersCount] = useState(0);
+  const [activeTripsCount, setActiveTripsCount] = useState(0);
   const [availabilityStatus, setAvailabilityStatus] = useState<"available" | "busy" | "offline">("offline");
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
@@ -61,6 +70,18 @@ export default function HomeScreen() {
         if ((payload.user?.role ?? "") === "operator") {
           const offers = await apiClient<Offer[]>("offers", { token });
           setPendingOffersCount(offers.filter((offer) => offer.status === "pending").length);
+        }
+
+        if ((payload.user?.role ?? "") === "requester" || (payload.user?.role ?? "") === "company") {
+          const trips = await apiClient<Array<TripRecord | RequesterTripListItem>>("trips", { token });
+          const activeStatuses = new Set(["assigned", "operator_en_route", "operator_arrived", "in_progress"]);
+          const count = trips.filter((item) => {
+            if (typeof item === "object" && item !== null && "trip" in item) {
+              return activeStatuses.has((item as RequesterTripListItem).trip.status);
+            }
+            return activeStatuses.has((item as TripRecord).status);
+          }).length;
+          setActiveTripsCount(count);
         }
       } catch {
         setMeData(null);
@@ -112,12 +133,24 @@ export default function HomeScreen() {
         {isRequester ? (
           <Card>
             <Text style={{ color: colors.text, fontSize: fontSize.lg, fontWeight: "600" }}>Requester Dashboard</Text>
-            <Text style={{ color: colors.textSecondary }}>Active trips: {meData?.activeTripsCount ?? 0}</Text>
+            <Text style={{ color: colors.textSecondary }}>Active trips: {activeTripsCount}</Text>
             <Button
               title="New Request"
-              onPress={() => Alert.alert("Coming soon", "Request creation will be available in the mobile flow next.")}
+              onPress={() => router.push("/(main)/request/new")}
               variant="secondary"
             />
+            <Button
+              title="View Requests"
+              onPress={() => router.push("/(main)/requests")}
+              variant="ghost"
+            />
+            {activeTripsCount > 0 ? (
+              <Button
+                title="View Active Trips"
+                onPress={() => router.push("/(main)/trips")}
+                variant="secondary"
+              />
+            ) : null}
           </Card>
         ) : null}
 

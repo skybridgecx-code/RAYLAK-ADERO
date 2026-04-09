@@ -13,7 +13,7 @@ import {
   type AderoRequestStatus,
   type AderoServiceType,
 } from "@raylak/db/schema";
-import { requireAderoRole } from "@/lib/auth";
+import { cookies } from "next/headers";
 import { createManualOffer, triggerRequestDispatch } from "./actions";
 
 export const metadata: Metadata = {
@@ -68,7 +68,11 @@ export default async function AdminDispatchPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAderoRole(["admin"]);
+  const cookieStore = await cookies();
+  const adminSecret = cookieStore.get("adero_admin_secret")?.value;
+  if (adminSecret !== process.env["ADERO_ADMIN_SECRET"]) {
+    throw new Error("Unauthorized");
+  }
   const params = await searchParams;
   const notice = typeof params["notice"] === "string" ? params["notice"] : null;
   const noticeType =

@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Adero — The Dispatch Network for Premium Transportation",
 };
-
-// ─── Nav ─────────────────────────────────────────────────────────────────────
 
 function Nav() {
   return (
@@ -43,19 +42,26 @@ function Nav() {
             </a>
           ))}
         </nav>
-        <a
-          href="#apply"
-          className="rounded px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80"
-          style={{ background: "#6366f1" }}
-        >
-          Apply to Join
-        </a>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/auth/sign-in"
+            className="rounded px-4 py-2 text-sm font-medium transition-colors hover:bg-white/5"
+            style={{ color: "rgba(255,255,255,0.6)" }}
+          >
+            Sign In
+          </Link>
+          <a
+            href="/apply"
+            className="rounded px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80"
+            style={{ background: "#6366f1" }}
+          >
+            Apply to Join
+          </a>
+        </div>
       </div>
     </header>
   );
 }
-
-// ─── Hero ─────────────────────────────────────────────────────────────────────
 
 function Hero() {
   return (
@@ -99,14 +105,14 @@ function Hero() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a
-            href="#apply"
+            href="/apply/company"
             className="rounded-lg px-8 py-3.5 text-sm font-semibold text-white transition-opacity hover:opacity-85"
             style={{ background: "#6366f1" }}
           >
             Apply for Company Access
           </a>
           <a
-            href="#operators"
+            href="/apply/operator"
             className="rounded-lg border px-8 py-3.5 text-sm font-medium transition-colors hover:bg-white/5"
             style={{
               borderColor: "rgba(255,255,255,0.15)",
@@ -120,8 +126,6 @@ function Hero() {
     </section>
   );
 }
-
-// ─── Stats bar ────────────────────────────────────────────────────────────────
 
 function StatsBar() {
   const stats = [
@@ -151,8 +155,6 @@ function StatsBar() {
     </section>
   );
 }
-
-// ─── For Companies ─────────────────────────────────────────────────────────────
 
 function ForCompanies() {
   const features = [
@@ -232,8 +234,6 @@ function ForCompanies() {
   );
 }
 
-// ─── For Operators ─────────────────────────────────────────────────────────────
-
 function ForOperators() {
   const benefits = [
     {
@@ -307,8 +307,6 @@ function ForOperators() {
     </section>
   );
 }
-
-// ─── How It Works ─────────────────────────────────────────────────────────────
 
 function HowItWorks() {
   const steps = [
@@ -391,8 +389,6 @@ function HowItWorks() {
   );
 }
 
-// ─── Positioning callout ───────────────────────────────────────────────────────
-
 function PositioningCallout() {
   return (
     <section className="py-20 px-6 bg-white">
@@ -448,8 +444,6 @@ function PositioningCallout() {
   );
 }
 
-// ─── Apply CTA ────────────────────────────────────────────────────────────────
-
 function ApplyCTA() {
   return (
     <section
@@ -471,14 +465,14 @@ function ApplyCTA() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a
-            href="mailto:network@adero.io"
+            href="/apply/company"
             className="rounded-lg px-8 py-3.5 text-sm font-semibold text-white transition-opacity hover:opacity-85"
             style={{ background: "#6366f1" }}
           >
             Apply as a Company
           </a>
           <a
-            href="mailto:operators@adero.io"
+            href="/apply/operator"
             className="rounded-lg border px-8 py-3.5 text-sm font-medium transition-colors hover:bg-white/5"
             style={{
               borderColor: "rgba(255,255,255,0.15)",
@@ -497,8 +491,6 @@ function ApplyCTA() {
     </section>
   );
 }
-
-// ─── Footer ───────────────────────────────────────────────────────────────────
 
 function Footer() {
   return (
@@ -540,8 +532,6 @@ function Footer() {
     </footer>
   );
 }
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
   return (

@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "Adero",
+    "slug": "adero",
+    "scheme": "adero",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0e1a"
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#818cf8"
+    },
+    "newArchEnabled": true,
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c63813da-01aa-4a0d-a72c-e7ebe0dd901d"
+      },
+      "router": {
+        "origin": false
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.adero.mobile",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Adero uses your location to support trip tracking.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Adero uses your location in the background during active trips.",
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0e1a"
+      },
+      "package": "com.adero.mobile",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-location",
+      "expo-notifications",
+      "expo-secure-store"
+    ],
+    "owner": "momojaasmian"
+  }
+}

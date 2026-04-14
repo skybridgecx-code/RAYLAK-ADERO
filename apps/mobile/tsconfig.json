@@ -7,8 +7,15 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
-  "include": ["expo-env.d.ts", "src/**/*.ts", "src/**/*.tsx"]
+  "include": [
+    "expo-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    ".expo/types/**/*.ts"
+  ]
 }

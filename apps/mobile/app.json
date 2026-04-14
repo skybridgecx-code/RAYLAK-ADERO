@@ -22,7 +22,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": "placeholder-project-id"
+        "projectId": "c63813da-01aa-4a0d-a72c-e7ebe0dd901d"
+      },
+      "router": {
+        "origin": false
       }
     },
     "ios": {
@@ -31,7 +34,11 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Adero uses your location to support trip tracking.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Adero uses your location in the background during active trips.",
-        "UIBackgroundModes": ["location", "remote-notification"]
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -52,6 +59,7 @@
       "expo-location",
       "expo-notifications",
       "expo-secure-store"
-    ]
+    ],
+    "owner": "momojaasmian"
   }
 }

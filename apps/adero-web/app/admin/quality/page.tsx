@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { requireAderoAdminPage } from "@/lib/admin-auth";
 import { count, inArray } from "drizzle-orm";
 import {
   ADERO_DISPUTE_PRIORITY_LABELS,
@@ -16,18 +15,8 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-async function requireAdmin(path: string): Promise<void> {
-  const secret = process.env["ADERO_ADMIN_SECRET"];
-  const cookieStore = await cookies();
-  const session = cookieStore.get("adero_admin")?.value;
-
-  if (!secret || session !== secret) {
-    redirect(`/admin/login?from=${encodeURIComponent(path)}`);
-  }
-}
-
 export default async function AdminQualityDashboardPage() {
-  await requireAdmin("/admin/quality");
+  await requireAderoAdminPage("/admin/quality");
 
   const [openDisputesRows, incidentRows, disputePriorityRows, incidentSeverityRows] =
     await Promise.all([

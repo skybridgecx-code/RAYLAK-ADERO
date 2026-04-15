@@ -1,8 +1,8 @@
 "use server";
 
+import { requireAderoAdminCookie } from "@/lib/admin-auth";
 import "server-only";
 
-import { cookies } from "next/headers";
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
   aderoGeofenceEvents,
@@ -58,13 +58,7 @@ function round(value: number, decimals: number): number {
 }
 
 async function assertAdminAccess(): Promise<void> {
-  const secret = process.env["ADERO_ADMIN_SECRET"];
-  const cookieStore = await cookies();
-  const session = cookieStore.get("adero_admin")?.value;
-
-  if (!secret || session !== secret) {
-    throw new Error("Admin access required.");
-  }
+  await requireAderoAdminCookie();
 }
 
 export async function getActiveTripsWithTracking() {

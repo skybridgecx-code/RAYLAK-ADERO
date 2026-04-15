@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { requireAderoAdminPage } from "@/lib/admin-auth";
 import { and, desc, eq } from "drizzle-orm";
 import {
   ADERO_TRUST_TIER_LABELS,
@@ -25,16 +24,6 @@ const TIER_STYLES: Record<string, { bg: string; color: string }> = {
   suspended: { bg: "rgba(239,68,68,0.15)", color: "#fda4af" },
 };
 
-async function requireAdmin(path: string): Promise<void> {
-  const secret = process.env["ADERO_ADMIN_SECRET"];
-  const cookieStore = await cookies();
-  const session = cookieStore.get("adero_admin")?.value;
-
-  if (!secret || session !== secret) {
-    redirect(`/admin/login?from=${encodeURIComponent(path)}`);
-  }
-}
-
 function formatPercent(value: string): string {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "0.00%";
@@ -52,7 +41,7 @@ export default async function AdminTrustScoresPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdmin("/admin/quality/trust");
+  await requireAderoAdminPage("/admin/quality/trust");
   const params = await searchParams;
   const tierFilter = typeof params["tier"] === "string" ? params["tier"] : "all";
 

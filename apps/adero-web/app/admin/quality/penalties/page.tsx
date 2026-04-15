@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { requireAderoAdminPage } from "@/lib/admin-auth";
 import { desc, eq } from "drizzle-orm";
 import { ADERO_PENALTY_TYPE_LABELS } from "@raylak/shared";
 import { db, aderoCancelPenalties, aderoUsers } from "@raylak/db";
@@ -20,16 +19,6 @@ const PENALTY_STYLES: Record<string, { bg: string; color: string }> = {
   suspension: { bg: "rgba(168,85,247,0.15)", color: "#d8b4fe" },
 };
 
-async function requireAdmin(path: string): Promise<void> {
-  const secret = process.env["ADERO_ADMIN_SECRET"];
-  const cookieStore = await cookies();
-  const session = cookieStore.get("adero_admin")?.value;
-
-  if (!secret || session !== secret) {
-    redirect(`/admin/login?from=${encodeURIComponent(path)}`);
-  }
-}
-
 function formatMoney(value: string | null, currency: string): string {
   if (!value) return "—";
   const amount = Number(value);
@@ -48,7 +37,7 @@ function formatDate(value: Date): string {
 }
 
 export default async function AdminPenaltyPage() {
-  await requireAdmin("/admin/quality/penalties");
+  await requireAderoAdminPage("/admin/quality/penalties");
 
   const rows = await db
     .select({

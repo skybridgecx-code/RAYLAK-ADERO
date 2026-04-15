@@ -31,9 +31,16 @@ function toErrorMessage(error: unknown): string {
 
 export async function GET(request: Request) {
   const cronSecret = request.headers.get("x-cron-secret");
-  const adminSecret = process.env["ADERO_ADMIN_SECRET"];
+  const configuredCronSecret = process.env["ADERO_CRON_SECRET"];
 
-  if (!adminSecret || cronSecret !== adminSecret) {
+  if (!configuredCronSecret) {
+    return NextResponse.json(
+      { error: "Server misconfigured: ADERO_CRON_SECRET is not set" },
+      { status: 500 },
+    );
+  }
+
+  if (cronSecret !== configuredCronSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

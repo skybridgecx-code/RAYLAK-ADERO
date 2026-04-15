@@ -2,6 +2,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
@@ -11,7 +12,6 @@ import {
   aderoRequests,
   aderoUsers,
 } from "@raylak/db";
-import { requireAderoRole } from "@/lib/auth";
 import { dispatchRequest } from "@/lib/dispatch";
 import {
   notifyOfferReceived,
@@ -40,12 +40,16 @@ function revalidateDispatchSurfaces() {
   revalidatePath("/app/requester");
 }
 
-export async function triggerRequestDispatch(formData: FormData): Promise<void> {
-  try {
-    await requireAderoRole(["admin"]);
-  } catch {
+async function requireAdminCookie(): Promise<void> {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("adero_admin")?.value;
+  if (!session || session !== process.env["ADERO_ADMIN_SECRET"]) {
     redirect(noticeUrl("Admin access required.", "error"));
   }
+}
+
+export async function triggerRequestDispatch(formData: FormData): Promise<void> {
+  await requireAdminCookie();
 
   const parsed = DispatchRequestSchema.safeParse({
     requestId: formData.get("requestId"),
@@ -78,11 +82,7 @@ export async function triggerRequestDispatch(formData: FormData): Promise<void> 
 }
 
 export async function createManualOffer(formData: FormData): Promise<void> {
-  try {
-    await requireAderoRole(["admin"]);
-  } catch {
-    redirect(noticeUrl("Admin access required.", "error"));
-  }
+  await requireAdminCookie();
 
   const parsed = ManualOfferSchema.safeParse({
     requestId: formData.get("requestId"),

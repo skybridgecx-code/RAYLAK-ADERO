@@ -4,6 +4,10 @@ import path from "node:path";
 const repoRoot = path.resolve(process.cwd(), "../..");
 const adminRoot = path.join(repoRoot, "apps/adero-web/app/admin");
 const helperPath = path.join(repoRoot, "apps/adero-web/lib/admin-auth.ts");
+const cronRoutePath = path.join(
+  repoRoot,
+  "apps/adero-web/app/api/cron/payment-lifecycle/route.ts",
+);
 
 const allowedDirectFiles = new Set([
   path.join(repoRoot, "apps/adero-web/app/admin/login/actions.ts"),
@@ -45,6 +49,24 @@ if (!fs.existsSync(helperPath)) {
     if (!helper.includes(`export async function ${exportedName}`)) {
       failures.push(`admin-auth helper is missing export: ${exportedName}`);
     }
+  }
+}
+
+if (!fs.existsSync(cronRoutePath)) {
+  failures.push("Missing apps/adero-web/app/api/cron/payment-lifecycle/route.ts");
+} else {
+  const cronRoute = fs.readFileSync(cronRoutePath, "utf8");
+
+  if (cronRoute.includes('process.env["ADERO_ADMIN_SECRET"]')) {
+    failures.push(`${relative(cronRoutePath)} must not use ADERO_ADMIN_SECRET`);
+  }
+
+  if (!cronRoute.includes('process.env["ADERO_CRON_SECRET"]')) {
+    failures.push(`${relative(cronRoutePath)} must read ADERO_CRON_SECRET`);
+  }
+
+  if (!cronRoute.includes('request.headers.get("x-cron-secret")')) {
+    failures.push(`${relative(cronRoutePath)} changed cron auth header from x-cron-secret`);
   }
 }
 

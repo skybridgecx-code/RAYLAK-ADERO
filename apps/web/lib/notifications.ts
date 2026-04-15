@@ -12,7 +12,7 @@
 import "server-only";
 import { db } from "@raylak/db";
 import { notifications } from "@raylak/db";
-import { redis } from "./redis";
+import { getRedis } from "./redis";
 
 export type NotificationChannel = "in_app" | "email" | "sms" | "push";
 
@@ -77,7 +77,7 @@ function publishInApp(
   payload: { type: string; title: string; body?: string },
 ): void {
   const channel = `raylak:user:${userId}:notifications`;
-  redis.publish(channel, JSON.stringify({ ...payload, ts: Date.now() })).catch((err: unknown) => {
+  getRedis().publish(channel, JSON.stringify({ ...payload, ts: Date.now() })).catch((err: unknown) => {
     console.error("[notifications] Redis publish failed:", (err as Error).message);
   });
 }

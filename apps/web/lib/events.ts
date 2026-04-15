@@ -8,7 +8,7 @@
  * Never await these in the critical path of a tRPC mutation.
  */
 import "server-only";
-import { redis } from "./redis";
+import { getRedis } from "./redis";
 import {
   REDIS_CHANNEL_OPS,
   type BookingStatusChangedEvent,
@@ -19,7 +19,7 @@ import {
 } from "@raylak/shared/events";
 
 function publish(event: RaylakEvent): void {
-  redis.publish(REDIS_CHANNEL_OPS, JSON.stringify(event)).catch((err: unknown) => {
+  getRedis().publish(REDIS_CHANNEL_OPS, JSON.stringify(event)).catch((err: unknown) => {
     console.error("[events] Failed to publish:", (err as Error).message ?? err);
   });
 }

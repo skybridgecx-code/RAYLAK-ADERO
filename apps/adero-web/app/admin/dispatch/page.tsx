@@ -69,7 +69,7 @@ export default async function AdminDispatchPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const cookieStore = await cookies();
-  const adminSecret = cookieStore.get("adero_admin_secret")?.value;
+  const adminSecret = cookieStore.get("adero_admin")?.value;
   if (adminSecret !== process.env["ADERO_ADMIN_SECRET"]) {
     throw new Error("Unauthorized");
   }

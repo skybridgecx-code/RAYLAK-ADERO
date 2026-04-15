@@ -5,9 +5,11 @@
   "packageManager": "pnpm@10.32.1",
   "scripts": {
     "build": "turbo run build",
+    "check:admin-auth": "pnpm --filter @adero/web check:admin-auth",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "validate": "pnpm check:admin-auth && pnpm typecheck && pnpm lint && SKIP_ENV_VALIDATION=1 pnpm build",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "db:generate": "turbo run db:generate --filter=@raylak/db",

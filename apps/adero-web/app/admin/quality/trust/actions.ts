@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { requireAderoAdminCookie } from "@/lib/admin-auth";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { recalculateTrustScore } from "@/lib/trust-score";
@@ -15,13 +15,7 @@ const RecalculateSchema = z.object({
 });
 
 async function assertAdminAccess(): Promise<void> {
-  const secret = process.env["ADERO_ADMIN_SECRET"];
-  const cookieStore = await cookies();
-  const session = cookieStore.get("adero_admin")?.value;
-
-  if (!secret || session !== secret) {
-    throw new Error("Admin access required.");
-  }
+  await requireAderoAdminCookie();
 }
 
 export async function adminRecalculateTrust(

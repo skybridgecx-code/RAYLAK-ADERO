@@ -1,8 +1,8 @@
 "use server";
 
+import { hasAderoAdminCookie } from "@/lib/admin-auth";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
@@ -41,9 +41,7 @@ function revalidateDispatchSurfaces() {
 }
 
 async function requireAdminCookie(): Promise<void> {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("adero_admin")?.value;
-  if (!session || session !== process.env["ADERO_ADMIN_SECRET"]) {
+  if (!(await hasAderoAdminCookie())) {
     redirect(noticeUrl("Admin access required.", "error"));
   }
 }

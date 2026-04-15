@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { redirect, notFound } from "next/navigation";
+import { requireAderoAdminPage } from "@/lib/admin-auth";
+import { notFound } from "next/navigation";
 import {
   ADERO_INCIDENT_CATEGORY_LABELS,
   ADERO_INCIDENT_SEVERITY_LABELS,
@@ -31,16 +31,6 @@ const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   closed: { bg: "rgba(100,116,139,0.15)", color: "#cbd5e1" },
 };
 
-async function requireAdmin(path: string): Promise<void> {
-  const secret = process.env["ADERO_ADMIN_SECRET"];
-  const cookieStore = await cookies();
-  const session = cookieStore.get("adero_admin")?.value;
-
-  if (!secret || session !== secret) {
-    redirect(`/admin/login?from=${encodeURIComponent(path)}`);
-  }
-}
-
 function formatDate(value: Date | null): string {
   if (!value) return "—";
   return value.toLocaleDateString("en-US", {
@@ -65,7 +55,7 @@ export default async function AdminIncidentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireAdmin(`/admin/quality/incidents/${id}`);
+  await requireAderoAdminPage(`/admin/quality/incidents/${id}`);
   const incident = await getIncidentById(id);
 
   if (!incident) {

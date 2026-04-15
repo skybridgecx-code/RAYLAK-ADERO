@@ -2,25 +2,33 @@ import { Redis } from "ioredis";
 import { env } from "./env";
 
 /**
- * Singleton Redis client.
- * Reused across hot-reloads in development via globalThis caching.
+ * Lazy singleton Redis client.
+ * Do not construct Redis at module import time because Next static builds import
+ * server modules while collecting page data.
  */
 const globalForRedis = globalThis as unknown as {
   redis: Redis | undefined;
 };
 
-export const redis =
-  globalForRedis.redis ??
-  new Redis(env.REDIS_URL, {
+export function getRedis(): Redis {
+  const existing = globalForRedis.redis;
+  if (existing) {
+    return existing;
+  }
+
+  const redis = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: 3,
     enableReadyCheck: true,
     lazyConnect: true,
   });
 
-if (env.NODE_ENV !== "production") {
-  globalForRedis.redis = redis;
-}
+  redis.on("error", (err) => {
+    console.error("[Redis] connection error:", err);
+  });
 
-redis.on("error", (err) => {
-  console.error("[Redis] connection error:", err);
-});
+  if (env.NODE_ENV !== "production") {
+    globalForRedis.redis = redis;
+  }
+
+  return redis;
+}

@@ -67,16 +67,20 @@ Set these in your hosting provider for the Adero production environment.
 
 ## 5. Post-Deploy Smoke Tests
 
-Primary smoke path: run the scripted post-deploy checks.
+Primary smoke path: run the scripted post-deploy checks through the root `pnpm` alias.
 
 ```bash
 ADERO_DEPLOYED_BASE_URL="https://<your-adero-prod-domain>" \
 ADERO_ADMIN_SECRET="..." \
 ADERO_CRON_SECRET="..." \
-./scripts/adero_deployed_smoke_check.sh
+pnpm smoke:adero:deployed
 ```
 
+This command is intentionally not part of `pnpm validate` because it requires production/deployed secrets and a live URL.
+
 Never commit secrets. Do not paste smoke command output if it includes provider logs or secrets.
+
+Fallback: you can also run `bash scripts/adero_deployed_smoke_check.sh`.
 
 Manual fallback checks (if needed):
 

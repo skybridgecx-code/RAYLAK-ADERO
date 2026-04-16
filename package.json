@@ -9,6 +9,7 @@
     "check:admin-auth": "pnpm --filter @adero/web check:admin-auth",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
+    "smoke:adero:deployed": "bash scripts/adero_deployed_smoke_check.sh",
     "typecheck": "turbo run typecheck",
     "validate": "pnpm check:admin-auth && pnpm check:adero-deploy && pnpm typecheck && pnpm lint && SKIP_ENV_VALIDATION=1 pnpm build",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",

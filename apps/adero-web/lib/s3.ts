@@ -6,13 +6,51 @@ import { env } from "./env";
 
 let _client: S3Client | null = null;
 
-function getClient(): S3Client {
+export const STORAGE_NOT_CONFIGURED_MESSAGE = "File storage is not configured.";
+
+class StorageNotConfiguredError extends Error {
+  constructor() {
+    super(STORAGE_NOT_CONFIGURED_MESSAGE);
+    this.name = "StorageNotConfiguredError";
+  }
+}
+
+function getStorageConfig() {
+  const accessKeyId = env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = env.AWS_SECRET_ACCESS_KEY;
+  const region = env.AWS_REGION;
+  const bucket = env.AWS_S3_BUCKET;
+
+  if (!accessKeyId || !secretAccessKey || !region || !bucket) {
+    return null;
+  }
+
+  return { accessKeyId, secretAccessKey, region, bucket };
+}
+
+export function isStorageConfigured(): boolean {
+  return getStorageConfig() !== null;
+}
+
+function getStorageConfigOrThrow() {
+  const storageConfig = getStorageConfig();
+  if (!storageConfig) {
+    throw new StorageNotConfiguredError();
+  }
+  return storageConfig;
+}
+
+function getClient(storageConfig: {
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+}): S3Client {
   if (!_client) {
     _client = new S3Client({
-      region: env.AWS_REGION,
+      region: storageConfig.region,
       credentials: {
-        accessKeyId: env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+        accessKeyId: storageConfig.accessKeyId,
+        secretAccessKey: storageConfig.secretAccessKey,
       },
     });
   }
@@ -58,23 +96,25 @@ export async function createPresignedPut({
   const { randomUUID } = await import("crypto");
   const ext = extFromContentType(contentType);
   const fileKey = `adero/portal-submissions/${memberType}/${profileId}/${randomUUID()}.${ext}`;
+  const storageConfig = getStorageConfigOrThrow();
 
   const command = new PutObjectCommand({
-    Bucket: env.AWS_S3_BUCKET,
+    Bucket: storageConfig.bucket,
     Key: fileKey,
     ContentType: contentType,
   });
 
-  const uploadUrl = await getSignedUrl(getClient(), command, { expiresIn: 300 }); // 5 minutes
+  const uploadUrl = await getSignedUrl(getClient(storageConfig), command, { expiresIn: 300 }); // 5 minutes
   return { uploadUrl, fileKey };
 }
 
 // ─── Presigned GET (download) ─────────────────────────────────────────────────
 
 export async function createPresignedGet(fileKey: string): Promise<string> {
+  const storageConfig = getStorageConfigOrThrow();
   const command = new GetObjectCommand({
-    Bucket: env.AWS_S3_BUCKET,
+    Bucket: storageConfig.bucket,
     Key: fileKey,
   });
-  return getSignedUrl(getClient(), command, { expiresIn: 3600 }); // 1 hour
+  return getSignedUrl(getClient(storageConfig), command, { expiresIn: 3600 }); // 1 hour
 }

@@ -32,6 +32,7 @@ import {
   needsMemberResubmission,
   toKnownDocumentType,
 } from "~/lib/portal-submission-threading";
+import { isStorageConfigured } from "~/lib/s3";
 import { PortalSubmitForm } from "./submit-form";
 
 export const metadata: Metadata = {
@@ -267,6 +268,7 @@ export default async function MemberPortalPage({
   const hasExpiringSoonRenewal = renewalEntries.some(
     (e) => e.displayStatus === "expiring_soon",
   );
+  const storageConfigured = isStorageConfigured();
 
   const isAccountPaused = activationStatus === "paused";
   const isAccountInactive = activationStatus === "inactive";
@@ -685,6 +687,7 @@ export default async function MemberPortalPage({
             memberType={memberType}
             profileId={profileId}
             allowedDocumentTypes={submissionDocTypes}
+            storageConfigured={storageConfigured}
           />
         </section>
       )}

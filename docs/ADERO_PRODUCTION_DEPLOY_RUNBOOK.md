@@ -3,6 +3,7 @@
 This runbook turns the checklist into exact operator steps for production deploys of `apps/adero-web`.
 
 Reference: `docs/ADERO_DEPLOYMENT_ENV_CHECKLIST.md`
+Deferred storage plan: `docs/ADERO_DEFERRED_AWS_STORAGE.md`
 
 ## 1. Pre-Deploy Local Verification
 
@@ -16,40 +17,43 @@ pnpm validate
 
 Release blocker: any failed command above.
 
-## 2. Required Production Env Vars
+## 2. Production Env Vars
 
 Set these in your hosting provider for the Adero production environment.
 
-### Clerk
+### Required for first deploy
 
+- `DATABASE_URL`
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 - `CLERK_SECRET_KEY`
-
-### Adero Admin/Cron
-
 - `ADERO_ADMIN_SECRET`
 - `ADERO_CRON_SECRET`
 
-### Stripe
+### Deferred / add later for portal file attachments
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION`
+- `AWS_S3_BUCKET`
+
+AWS/S3 setup is intentionally deferred. Before enabling production portal file attachments, create a
+private S3 bucket, configure least-privilege credentials, set the AWS env vars, redeploy, and run
+portal upload/download smoke tests. Do not use dummy AWS values.
+
+### Additional Adero feature env vars (as needed)
+
+Stripe:
 
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_CONNECT_WEBHOOK_SECRET`
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
 
-### Email/Base URL
+Email/base URL:
 
 - `RESEND_API_KEY`
 - `ADERO_FROM_EMAIL`
 - `ADERO_BASE_URL`
-
-### Database/Shared Infra
-
-- `DATABASE_URL`
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_S3_BUCKET`
-- `AWS_REGION`
 
 ## 3. Critical Secret Separation
 

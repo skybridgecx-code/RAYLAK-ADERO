@@ -13,7 +13,7 @@ import {
   getCurrentSubmissionByDocumentType,
   getSupersededByMap,
 } from "~/lib/portal-submission-threading";
-import { createPresignedGet } from "~/lib/s3";
+import { createPresignedGet, isStorageConfigured } from "~/lib/s3";
 import {
   MEMBER_DOCUMENT_TYPE_LABELS,
   type MemberDocumentType,
@@ -141,19 +141,22 @@ export default async function SubmissionChainTimelinePage({
     MEMBER_DOCUMENT_TYPE_LABELS[row.submission.documentType as MemberDocumentType] ??
     row.submission.documentType;
 
+  const storageConfigured = isStorageConfigured();
   const downloadUrls = new Map<string, string>();
-  await Promise.all(
-    timeline
-      .filter((submission) => submission.fileKey)
-      .map(async (submission) => {
-        try {
-          const url = await createPresignedGet(submission.fileKey!);
-          downloadUrls.set(submission.id, url);
-        } catch {
-          // best-effort for timeline display
-        }
-      }),
-  );
+  if (storageConfigured) {
+    await Promise.all(
+      timeline
+        .filter((submission) => submission.fileKey)
+        .map(async (submission) => {
+          try {
+            const url = await createPresignedGet(submission.fileKey!);
+            downloadUrls.set(submission.id, url);
+          } catch {
+            // best-effort for timeline display
+          }
+        }),
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -288,10 +291,10 @@ export default async function SubmissionChainTimelinePage({
                   {submission.memberNote}
                 </p>
 
-                {submission.fileName && (
+                {(submission.fileName || submission.fileKey) && (
                   <div className="flex items-center gap-2">
                     <span className="text-[11px]" style={{ color: "#475569" }}>
-                      📎 {submission.fileName}
+                      📎 {submission.fileName ?? "Attachment"}
                       {submission.fileSizeBytes ? ` · ${formatBytes(submission.fileSizeBytes)}` : ""}
                     </span>
                     {downloadUrl ? (
@@ -304,6 +307,10 @@ export default async function SubmissionChainTimelinePage({
                       >
                         Download ↗
                       </a>
+                    ) : !storageConfigured ? (
+                      <span className="text-[11px]" style={{ color: "#334155" }}>
+                        Attachment stored, but file storage is not configured for downloads.
+                      </span>
                     ) : (
                       <span className="text-[11px]" style={{ color: "#334155" }}>
                         (link unavailable)

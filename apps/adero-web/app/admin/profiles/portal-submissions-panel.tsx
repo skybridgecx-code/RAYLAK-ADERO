@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { AderoPortalSubmission } from "@raylak/db";
 import type { AderoMemberType } from "~/lib/document-monitoring";
 import { getSupersededByMap } from "~/lib/portal-submission-threading";
-import { createPresignedGet } from "~/lib/s3";
+import { createPresignedGet, isStorageConfigured } from "~/lib/s3";
 import { MEMBER_DOCUMENT_TYPE_LABELS, type MemberDocumentType } from "~/lib/validators";
 import { reviewPortalSubmission } from "./portal-submission-actions";
 
@@ -61,19 +61,22 @@ export async function PortalSubmissionsPanel({
   if (submissions.length === 0) return null;
 
   // Generate presigned GET URLs for any submissions that have a file attachment
+  const storageConfigured = isStorageConfigured();
   const downloadUrls = new Map<string, string>();
-  await Promise.all(
-    submissions
-      .filter((s) => s.fileKey)
-      .map(async (s) => {
-        try {
-          const url = await createPresignedGet(s.fileKey!);
-          downloadUrls.set(s.id, url);
-        } catch {
-          // Best-effort — don't fail the page if presign fails
-        }
-      }),
-  );
+  if (storageConfigured) {
+    await Promise.all(
+      submissions
+        .filter((s) => s.fileKey)
+        .map(async (s) => {
+          try {
+            const url = await createPresignedGet(s.fileKey!);
+            downloadUrls.set(s.id, url);
+          } catch {
+            // Best-effort — don't fail the page if presign fails
+          }
+        }),
+    );
+  }
 
   const supersededByMap = getSupersededByMap(submissions);
 
@@ -132,10 +135,10 @@ export async function PortalSubmissionsPanel({
               </p>
 
               {/* File attachment */}
-              {sub.fileName && (
+              {(sub.fileName || sub.fileKey) && (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px]" style={{ color: "#475569" }}>
-                    📎 {sub.fileName}
+                    📎 {sub.fileName ?? "Attachment"}
                     {sub.fileSizeBytes ? ` · ${formatBytes(sub.fileSizeBytes)}` : ""}
                   </span>
                   {downloadUrl ? (
@@ -148,6 +151,10 @@ export async function PortalSubmissionsPanel({
                     >
                       Download ↗
                     </a>
+                  ) : !storageConfigured ? (
+                    <span className="text-[11px]" style={{ color: "#334155" }}>
+                      Attachment stored, but file storage is not configured for downloads.
+                    </span>
                   ) : (
                     <span className="text-[11px]" style={{ color: "#334155" }}>
                       (link unavailable)

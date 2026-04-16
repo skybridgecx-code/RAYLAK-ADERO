@@ -19,11 +19,13 @@ export function PortalSubmitForm({
   memberType,
   profileId,
   allowedDocumentTypes,
+  storageConfigured,
 }: {
   token: string;
   memberType: "company" | "operator";
   profileId: string;
   allowedDocumentTypes: MemberDocumentType[];
+  storageConfigured: boolean;
 }) {
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,13 @@ export function PortalSubmitForm({
   const isPending = phase === "uploading" || phase === "submitting";
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!storageConfigured) {
+      setSelectedFile(null);
+      setFileError(null);
+      e.target.value = "";
+      return;
+    }
+
     const file = e.target.files?.[0] ?? null;
     setFileError(null);
     if (!file) {
@@ -56,6 +65,11 @@ export function PortalSubmitForm({
 
     // Step 1: upload file if one was selected
     if (selectedFile) {
+      if (!storageConfigured) {
+        setError("File attachments are not available yet.");
+        setPhase("error");
+        return;
+      }
       setPhase("uploading");
       try {
         const params = new URLSearchParams({
@@ -184,15 +198,21 @@ export function PortalSubmitForm({
           Attach a file{" "}
           <span style={{ color: "#334155" }}>(optional — PDF, JPEG, PNG, DOCX, max 10 MB)</span>
         </label>
-        <input
-          id="ps-file"
-          type="file"
-          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-          disabled={isPending}
-          onChange={handleFileChange}
-          className="block w-full text-xs disabled:opacity-60"
-          style={{ color: "#64748b" }}
-        />
+        {storageConfigured ? (
+          <input
+            id="ps-file"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+            disabled={isPending}
+            onChange={handleFileChange}
+            className="block w-full text-xs disabled:opacity-60"
+            style={{ color: "#64748b" }}
+          />
+        ) : (
+          <p className="text-xs" style={{ color: "#64748b" }}>
+            File attachments are not available yet.
+          </p>
+        )}
         {fileError && (
           <p className="text-xs" style={{ color: "#f87171" }}>
             {fileError}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { aderoCompanyProfiles, aderoOperatorProfiles, db } from "@raylak/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { ALLOWED_CONTENT_TYPES, createPresignedPut } from "~/lib/s3";
+import { ALLOWED_CONTENT_TYPES, createPresignedPut, isStorageConfigured } from "~/lib/s3";
 
 const QuerySchema = z.object({
   token: z.string().uuid(),
@@ -27,6 +27,13 @@ export async function GET(request: Request) {
     return NextResponse.json(
       { error: "File type not allowed. Use PDF, JPEG, PNG, WEBP, DOC, or DOCX." },
       { status: 415 },
+    );
+  }
+
+  if (!isStorageConfigured()) {
+    return NextResponse.json(
+      { error: "File uploads are not configured." },
+      { status: 503 },
     );
   }
 

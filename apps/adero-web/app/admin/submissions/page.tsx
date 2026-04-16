@@ -9,7 +9,7 @@ import {
 } from "@raylak/db";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { createPresignedGet } from "~/lib/s3";
+import { createPresignedGet, isStorageConfigured } from "~/lib/s3";
 import {
   MEMBER_DOCUMENT_TYPE_LABELS,
   MEMBER_DOCUMENT_TYPES,
@@ -156,19 +156,22 @@ export default async function SubmissionsInboxPage({
     .limit(200);
 
   // ── Generate presigned download URLs ──────────────────────────────────────
+  const storageConfigured = isStorageConfigured();
   const downloadUrls = new Map<string, string>();
-  await Promise.all(
-    rows
-      .filter((r) => r.submission.fileKey)
-      .map(async (r) => {
-        try {
-          const url = await createPresignedGet(r.submission.fileKey!);
-          downloadUrls.set(r.submission.id, url);
-        } catch {
-          // best-effort
-        }
-      }),
-  );
+  if (storageConfigured) {
+    await Promise.all(
+      rows
+        .filter((r) => r.submission.fileKey)
+        .map(async (r) => {
+          try {
+            const url = await createPresignedGet(r.submission.fileKey!);
+            downloadUrls.set(r.submission.id, url);
+          } catch {
+            // best-effort
+          }
+        }),
+    );
+  }
 
   // ── Filter URL helpers ────────────────────────────────────────────────────
   function filterUrl(overrides: Record<string, string>) {
@@ -444,10 +447,10 @@ export default async function SubmissionsInboxPage({
                 </p>
 
                 {/* File attachment */}
-                {sub.fileName && (
+                {(sub.fileName || sub.fileKey) && (
                   <div className="mt-2 flex items-center gap-2">
                     <span className="text-[11px]" style={{ color: "#475569" }}>
-                      📎 {sub.fileName}
+                      📎 {sub.fileName ?? "Attachment"}
                       {sub.fileSizeBytes ? ` · ${formatBytes(sub.fileSizeBytes)}` : ""}
                     </span>
                     {downloadUrl ? (
@@ -460,6 +463,10 @@ export default async function SubmissionsInboxPage({
                       >
                         Download ↗
                       </a>
+                    ) : !storageConfigured ? (
+                      <span className="text-[11px]" style={{ color: "#334155" }}>
+                        Attachment stored, but file storage is not configured for downloads.
+                      </span>
                     ) : (
                       <span className="text-[11px]" style={{ color: "#334155" }}>
                         (link unavailable)

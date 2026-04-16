@@ -2,6 +2,8 @@
 
 Use this checklist for post-deploy production QA on every Adero release.
 
+QA log template: `docs/PHASE_15C_ADERO_PRODUCTION_QA_LOG.md`
+
 ## Production URLs
 
 - Raylak: https://raylak.vercel.app

@@ -10,7 +10,7 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "validate": "pnpm check:admin-auth && pnpm typecheck && pnpm lint && SKIP_ENV_VALIDATION=1 pnpm build",
+    "validate": "pnpm check:admin-auth && pnpm check:adero-deploy && pnpm typecheck && pnpm lint && SKIP_ENV_VALIDATION=1 pnpm build",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "db:generate": "turbo run db:generate --filter=@raylak/db",

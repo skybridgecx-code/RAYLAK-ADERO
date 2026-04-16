@@ -67,7 +67,18 @@ Set these in your hosting provider for the Adero production environment.
 
 ## 5. Post-Deploy Smoke Tests
 
-Set local shell variables (never paste real secrets into saved files):
+Primary smoke path: run the scripted post-deploy checks.
+
+```bash
+ADERO_DEPLOYED_BASE_URL="https://<your-adero-prod-domain>" \
+ADERO_ADMIN_SECRET="..." \
+ADERO_CRON_SECRET="..." \
+./scripts/adero_deployed_smoke_check.sh
+```
+
+Never commit secrets. Do not paste smoke command output if it includes provider logs or secrets.
+
+Manual fallback checks (if needed):
 
 ```bash
 export ADERO_BASE_URL="https://<your-adero-prod-domain>"

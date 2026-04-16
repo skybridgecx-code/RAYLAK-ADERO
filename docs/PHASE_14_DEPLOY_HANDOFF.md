@@ -38,3 +38,5 @@
 
 - Do not paste raw secrets in docs, tickets, screenshots, chats, or logs.
 - `ADERO_ADMIN_SECRET` and `ADERO_CRON_SECRET` must remain different.
+
+QA checklist: `docs/PHASE_15B_ADERO_PRODUCTION_QA_CHECKLIST.md`

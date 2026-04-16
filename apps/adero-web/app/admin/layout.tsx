@@ -129,6 +129,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             >
               Chain Health
             </Link>
+            <Link
+              href="/admin/health"
+              className="text-xs font-medium transition-colors"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              System Health
+            </Link>
           </nav>
 
           <form method="GET" action="/admin/search" className="ml-auto flex items-center gap-2">

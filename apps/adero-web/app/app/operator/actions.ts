@@ -146,6 +146,7 @@ export async function acceptOffer(
   let acceptedRequestId: string | null = null;
   let requesterUserId: string | null = null;
   let acceptedOperatorId: string | null = null;
+  let createdTrip = false;
 
   try {
     await db.transaction(async (tx) => {
@@ -172,6 +173,32 @@ export async function acceptOffer(
 
       if (actor.role !== "admin" && offer.operatorId !== actor.id) {
         throw new Error("Forbidden: this offer is not assigned to you.");
+      }
+
+      if (offer.offerStatus === "accepted") {
+        const [acceptedTrip] = await tx
+          .select({
+            id: aderoTrips.id,
+          })
+          .from(aderoTrips)
+          .where(
+            and(
+              eq(aderoTrips.requestId, offer.requestId),
+              eq(aderoTrips.operatorId, offer.operatorId),
+              inArray(aderoTrips.status, ACTIVE_TRIP_STATUSES),
+            ),
+          )
+          .limit(1);
+
+        if (acceptedTrip) {
+          tripId = acceptedTrip.id;
+          acceptedRequestId = offer.requestId;
+          requesterUserId = offer.requesterId;
+          acceptedOperatorId = offer.operatorId;
+          return;
+        }
+
+        throw new Error("Offer is already accepted.");
       }
 
       if (offer.offerStatus !== "pending") {
@@ -268,6 +295,7 @@ export async function acceptOffer(
       acceptedRequestId = offer.requestId;
       requesterUserId = offer.requesterId;
       acceptedOperatorId = offer.operatorId;
+      createdTrip = true;
 
       await tx.insert(aderoTripStatusLog).values({
         tripId: trip.id,
@@ -283,7 +311,7 @@ export async function acceptOffer(
     return { error: actionError(error), success: null, tripId: null };
   }
 
-  if (requesterUserId && acceptedRequestId && acceptedOperatorId) {
+  if (createdTrip && requesterUserId && acceptedRequestId && acceptedOperatorId) {
     try {
       const operatorName = await resolveOperatorDisplayName(acceptedOperatorId);
       await notifyRequestAccepted(requesterUserId, acceptedRequestId, operatorName);
@@ -293,7 +321,11 @@ export async function acceptOffer(
   }
 
   revalidateOperatorViews(offerId, tripId ?? undefined);
-  return { error: null, success: "Offer accepted and trip created.", tripId };
+  return {
+    error: null,
+    success: createdTrip ? "Offer accepted and trip created." : "Offer already accepted.",
+    tripId,
+  };
 }
 
 export async function declineOffer(

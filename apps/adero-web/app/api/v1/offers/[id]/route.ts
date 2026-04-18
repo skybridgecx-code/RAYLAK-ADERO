@@ -182,6 +182,7 @@ export async function POST(
     let requestId: string | null = null;
     let requesterId: string | null = null;
     let operatorId: string | null = null;
+    let createdTrip = false;
 
     await db.transaction(async (tx) => {
       const [offer] = await tx
@@ -207,6 +208,32 @@ export async function POST(
 
       if (user.role !== "admin" && offer.operatorId !== user.id) {
         throw new Error("Forbidden");
+      }
+
+      if (offer.offerStatus === "accepted") {
+        const [acceptedTrip] = await tx
+          .select({
+            id: aderoTrips.id,
+          })
+          .from(aderoTrips)
+          .where(
+            and(
+              eq(aderoTrips.requestId, offer.requestId),
+              eq(aderoTrips.operatorId, offer.operatorId),
+              inArray(aderoTrips.status, ACTIVE_TRIP_STATUSES),
+            ),
+          )
+          .limit(1);
+
+        if (acceptedTrip !== undefined) {
+          tripId = acceptedTrip.id;
+          requestId = offer.requestId;
+          requesterId = offer.requesterId;
+          operatorId = offer.operatorId;
+          return;
+        }
+
+        throw new Error("Offer is already accepted.");
       }
 
       if (offer.offerStatus !== "pending") {
@@ -312,10 +339,12 @@ export async function POST(
       requestId = offer.requestId;
       requesterId = offer.requesterId;
       operatorId = offer.operatorId;
+      createdTrip = true;
     });
 
     if (
-      requesterId !== null
+      createdTrip
+      && requesterId !== null
       && requestId !== null
       && operatorId !== null
     ) {

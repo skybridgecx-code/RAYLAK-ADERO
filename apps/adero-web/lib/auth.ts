@@ -96,6 +96,17 @@ export async function resolveAderoUser(): Promise<AderoUser | null> {
       companyProfileId,
       operatorProfileId,
     })
+    .onConflictDoUpdate({
+      target: aderoUsers.clerkId,
+      set: {
+        email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role,
+        companyProfileId,
+        operatorProfileId,
+      },
+    })
     .returning();
 
   return inserted[0] ?? null;

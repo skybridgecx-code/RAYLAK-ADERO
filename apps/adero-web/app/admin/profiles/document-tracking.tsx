@@ -419,6 +419,7 @@ function NewDocumentForm({
   );
 }
 
+
 function ExistingDocumentForm({
   document,
   memberType,
@@ -439,197 +440,199 @@ function ExistingDocumentForm({
   const displayStatus = getDocumentDisplayStatus(document);
 
   return (
-    <form
-      action={formAction}
-      className="rounded-xl border p-5"
-      style={{
-        borderColor: "rgba(255,255,255,0.07)",
-        background: "rgba(255,255,255,0.02)",
-      }}
-    >
-      <input type="hidden" name="memberType" value={memberType} />
-      <input type="hidden" name="profileId" value={profileId} />
-      <input type="hidden" name="documentId" value={document.id} />
+    <div className="space-y-4">
+      <form
+        action={formAction}
+        className="rounded-xl border p-5"
+        style={{
+          borderColor: "rgba(255,255,255,0.07)",
+          background: "rgba(255,255,255,0.02)",
+        }}
+      >
+        <input type="hidden" name="memberType" value={memberType} />
+        <input type="hidden" name="profileId" value={profileId} />
+        <input type="hidden" name="documentId" value={document.id} />
 
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
-            {document.title}
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium" style={{ color: "#f1f5f9" }}>
+              {document.title}
+            </p>
+            <p className="mt-1 text-xs" style={{ color: "#475569" }}>
+              Updated {fmtTimestamp(document.updatedAt)}
+            </p>
+          </div>
+          <DocumentStatusBadge status={displayStatus} />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label
+              className="mb-1.5 block text-xs font-medium"
+              htmlFor={`document-title-${document.id}`}
+              style={{ color: "#64748b" }}
+            >
+              Title
+            </label>
+            <input
+              id={`document-title-${document.id}`}
+              name="title"
+              defaultValue={document.title}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "rgba(255,255,255,0.12)",
+                background: "#1e293b",
+                color: "#f1f5f9",
+              }}
+            />
+            <FieldError messages={state.fieldErrors["title"]} />
+          </div>
+
+          <div>
+            <label
+              className="mb-1.5 block text-xs font-medium"
+              htmlFor={`document-type-${document.id}`}
+              style={{ color: "#64748b" }}
+            >
+              Type
+            </label>
+            <select
+              id={`document-type-${document.id}`}
+              name="documentType"
+              defaultValue={document.documentType}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "rgba(255,255,255,0.12)",
+                background: "#1e293b",
+                color: "#f1f5f9",
+              }}
+            >
+              {MEMBER_DOCUMENT_TYPES.map((documentType) => (
+                <option key={documentType} value={documentType}>
+                  {MEMBER_DOCUMENT_TYPE_LABELS[documentType]}
+                </option>
+              ))}
+            </select>
+            <FieldError messages={state.fieldErrors["documentType"]} />
+          </div>
+
+          <div>
+            <label
+              className="mb-1.5 block text-xs font-medium"
+              htmlFor={`document-status-${document.id}`}
+              style={{ color: "#64748b" }}
+            >
+              Status
+            </label>
+            <select
+              id={`document-status-${document.id}`}
+              name="status"
+              defaultValue={document.status}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "rgba(255,255,255,0.12)",
+                background: "#1e293b",
+                color: "#f1f5f9",
+              }}
+            >
+              {MEMBER_DOCUMENT_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {MEMBER_DOCUMENT_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
+            <FieldError messages={state.fieldErrors["status"]} />
+          </div>
+
+          <div>
+            <label
+              className="mb-1.5 block text-xs font-medium"
+              htmlFor={`document-expiration-${document.id}`}
+              style={{ color: "#64748b" }}
+            >
+              Expiration date
+            </label>
+            <input
+              id={`document-expiration-${document.id}`}
+              name="expirationDate"
+              type="date"
+              defaultValue={document.expirationDate ?? ""}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "rgba(255,255,255,0.12)",
+                background: "#1e293b",
+                color: "#f1f5f9",
+              }}
+            />
+            <FieldError messages={state.fieldErrors["expirationDate"]} />
+          </div>
+
+          <div>
+            <label
+              className="mb-1.5 block text-xs font-medium"
+              htmlFor={`document-actor-${document.id}`}
+              style={{ color: "#64748b" }}
+            >
+              Your name
+            </label>
+            <input
+              id={`document-actor-${document.id}`}
+              name="actorName"
+              placeholder="Optional"
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "rgba(255,255,255,0.12)",
+                background: "#1e293b",
+                color: "#f1f5f9",
+              }}
+            />
+            <FieldError messages={state.fieldErrors["actorName"]} />
+          </div>
+
+          <div className="md:col-span-2">
+            <label
+              className="mb-1.5 block text-xs font-medium"
+              htmlFor={`document-notes-${document.id}`}
+              style={{ color: "#64748b" }}
+            >
+              Notes
+            </label>
+            <textarea
+              id={`document-notes-${document.id}`}
+              name="notes"
+              rows={3}
+              defaultValue={document.notes ?? ""}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "rgba(255,255,255,0.12)",
+                background: "#1e293b",
+                color: "#f1f5f9",
+              }}
+            />
+            <FieldError messages={state.fieldErrors["notes"]} />
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs" style={{ color: "#64748b" }}>
+            Expires {fmtDate(document.expirationDate)}
           </p>
-          <p className="mt-1 text-xs" style={{ color: "#475569" }}>
-            Updated {fmtTimestamp(document.updatedAt)}
+          <button
+            type="submit"
+            disabled={isPending}
+            className="rounded-lg px-4 py-2 text-sm font-medium transition-opacity disabled:opacity-50"
+            style={{ background: accent.bg, color: accent.color }}
+          >
+            {isPending ? "Saving..." : "Save changes"}
+          </button>
+        </div>
+
+        {state.error && (
+          <p className="mt-4 text-xs" style={{ color: "#f87171" }}>
+            {state.error}
           </p>
-        </div>
-        <DocumentStatusBadge status={displayStatus} />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="md:col-span-2">
-          <label
-            className="mb-1.5 block text-xs font-medium"
-            htmlFor={`document-title-${document.id}`}
-            style={{ color: "#64748b" }}
-          >
-            Title
-          </label>
-          <input
-            id={`document-title-${document.id}`}
-            name="title"
-            defaultValue={document.title}
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{
-              borderColor: "rgba(255,255,255,0.12)",
-              background: "#1e293b",
-              color: "#f1f5f9",
-            }}
-          />
-          <FieldError messages={state.fieldErrors["title"]} />
-        </div>
-
-        <div>
-          <label
-            className="mb-1.5 block text-xs font-medium"
-            htmlFor={`document-type-${document.id}`}
-            style={{ color: "#64748b" }}
-          >
-            Type
-          </label>
-          <select
-            id={`document-type-${document.id}`}
-            name="documentType"
-            defaultValue={document.documentType}
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{
-              borderColor: "rgba(255,255,255,0.12)",
-              background: "#1e293b",
-              color: "#f1f5f9",
-            }}
-          >
-            {MEMBER_DOCUMENT_TYPES.map((documentType) => (
-              <option key={documentType} value={documentType}>
-                {MEMBER_DOCUMENT_TYPE_LABELS[documentType]}
-              </option>
-            ))}
-          </select>
-          <FieldError messages={state.fieldErrors["documentType"]} />
-        </div>
-
-        <div>
-          <label
-            className="mb-1.5 block text-xs font-medium"
-            htmlFor={`document-status-${document.id}`}
-            style={{ color: "#64748b" }}
-          >
-            Status
-          </label>
-          <select
-            id={`document-status-${document.id}`}
-            name="status"
-            defaultValue={document.status}
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{
-              borderColor: "rgba(255,255,255,0.12)",
-              background: "#1e293b",
-              color: "#f1f5f9",
-            }}
-          >
-            {MEMBER_DOCUMENT_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {MEMBER_DOCUMENT_STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
-          <FieldError messages={state.fieldErrors["status"]} />
-        </div>
-
-        <div>
-          <label
-            className="mb-1.5 block text-xs font-medium"
-            htmlFor={`document-expiration-${document.id}`}
-            style={{ color: "#64748b" }}
-          >
-            Expiration date
-          </label>
-          <input
-            id={`document-expiration-${document.id}`}
-            name="expirationDate"
-            type="date"
-            defaultValue={document.expirationDate ?? ""}
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{
-              borderColor: "rgba(255,255,255,0.12)",
-              background: "#1e293b",
-              color: "#f1f5f9",
-            }}
-          />
-          <FieldError messages={state.fieldErrors["expirationDate"]} />
-        </div>
-
-        <div>
-          <label
-            className="mb-1.5 block text-xs font-medium"
-            htmlFor={`document-actor-${document.id}`}
-            style={{ color: "#64748b" }}
-          >
-            Your name
-          </label>
-          <input
-            id={`document-actor-${document.id}`}
-            name="actorName"
-            placeholder="Optional"
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{
-              borderColor: "rgba(255,255,255,0.12)",
-              background: "#1e293b",
-              color: "#f1f5f9",
-            }}
-          />
-          <FieldError messages={state.fieldErrors["actorName"]} />
-        </div>
-
-        <div className="md:col-span-2">
-          <label
-            className="mb-1.5 block text-xs font-medium"
-            htmlFor={`document-notes-${document.id}`}
-            style={{ color: "#64748b" }}
-          >
-            Notes
-          </label>
-          <textarea
-            id={`document-notes-${document.id}`}
-            name="notes"
-            rows={3}
-            defaultValue={document.notes ?? ""}
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{
-              borderColor: "rgba(255,255,255,0.12)",
-              background: "#1e293b",
-              color: "#f1f5f9",
-            }}
-          />
-          <FieldError messages={state.fieldErrors["notes"]} />
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs" style={{ color: "#64748b" }}>
-          Expires {fmtDate(document.expirationDate)}
-        </p>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-lg px-4 py-2 text-sm font-medium transition-opacity disabled:opacity-50"
-          style={{ background: accent.bg, color: accent.color }}
-        >
-          {isPending ? "Saving..." : "Save changes"}
-        </button>
-      </div>
-
-      {state.error && (
-        <p className="mt-4 text-xs" style={{ color: "#f87171" }}>
-          {state.error}
-        </p>
-      )}
+        )}
+      </form>
 
       <DocumentComplianceActionForm
         memberType={memberType}
@@ -638,9 +641,10 @@ function ExistingDocumentForm({
         documentId={document.id}
         notifications={complianceNotifications}
       />
-    </form>
+    </div>
   );
 }
+
 
 export function DocumentTracking({
   documents,

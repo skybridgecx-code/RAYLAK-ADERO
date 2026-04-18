@@ -21,7 +21,7 @@ import {
   notifyRequestAccepted,
   resolveOperatorDisplayName,
 } from "@/lib/notifications";
-import { getQueueStatusForPendingOffers } from "@/lib/request-status-sync";
+import { ACTIVE_TRIP_STATUSES, getQueueStatusForPendingOffers } from "@/lib/request-status-sync";
 
 export type OperatorWorkflowActionState = {
   error: string | null;
@@ -178,14 +178,22 @@ export async function acceptOffer(
         throw new Error(`Offer is already ${offer.offerStatus}.`);
       }
 
-      const [existingTrip] = await tx
-        .select({ id: aderoTrips.id })
+      const [existingActiveTrip] = await tx
+        .select({
+          id: aderoTrips.id,
+          status: aderoTrips.status,
+        })
         .from(aderoTrips)
-        .where(eq(aderoTrips.requestId, offer.requestId))
+        .where(
+          and(
+            eq(aderoTrips.requestId, offer.requestId),
+            inArray(aderoTrips.status, ACTIVE_TRIP_STATUSES),
+          ),
+        )
         .limit(1);
 
-      if (existingTrip) {
-        throw new Error("A trip already exists for this request.");
+      if (existingActiveTrip) {
+        throw new Error("An active trip already exists for this request.");
       }
 
       const [acceptedOffer] = await tx

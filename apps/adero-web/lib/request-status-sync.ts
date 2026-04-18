@@ -1,6 +1,14 @@
 import type { AderoRequestStatus, AderoTripStatus } from "@raylak/db/schema";
 
 type QueueRequestStatus = Extract<AderoRequestStatus, "submitted" | "matched">;
+type ActiveTripStatus = Exclude<AderoTripStatus, "completed" | "canceled">;
+
+export const ACTIVE_TRIP_STATUSES: ActiveTripStatus[] = [
+  "assigned",
+  "operator_en_route",
+  "operator_arrived",
+  "in_progress",
+];
 
 export function isQueueRequestStatus(value: string): value is QueueRequestStatus {
   return value === "submitted" || value === "matched";
@@ -15,6 +23,10 @@ export function getQueueStatusForPendingOffers(
   }
 
   return pendingOfferCount > 0 ? "matched" : "submitted";
+}
+
+export function isActiveTripStatus(value: string): value is ActiveTripStatus {
+  return (ACTIVE_TRIP_STATUSES as readonly string[]).includes(value);
 }
 
 export function getRequestStatusForTripStatus(

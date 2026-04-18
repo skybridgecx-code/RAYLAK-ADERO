@@ -13,7 +13,7 @@ import {
   notifyRequestAccepted,
   resolveOperatorDisplayName,
 } from "@/lib/notifications";
-import { getQueueStatusForPendingOffers } from "@/lib/request-status-sync";
+import { ACTIVE_TRIP_STATUSES, getQueueStatusForPendingOffers } from "@/lib/request-status-sync";
 import { apiError, apiSuccess, getErrorMessage } from "@/app/api/v1/_utils";
 
 const ParamsSchema = z.object({
@@ -213,14 +213,22 @@ export async function POST(
         throw new Error(`Offer is already ${offer.offerStatus}.`);
       }
 
-      const [existingTrip] = await tx
-        .select({ id: aderoTrips.id })
+      const [existingActiveTrip] = await tx
+        .select({
+          id: aderoTrips.id,
+          status: aderoTrips.status,
+        })
         .from(aderoTrips)
-        .where(eq(aderoTrips.requestId, offer.requestId))
+        .where(
+          and(
+            eq(aderoTrips.requestId, offer.requestId),
+            inArray(aderoTrips.status, ACTIVE_TRIP_STATUSES),
+          ),
+        )
         .limit(1);
 
-      if (existingTrip !== undefined) {
-        throw new Error("A trip already exists for this request.");
+      if (existingActiveTrip !== undefined) {
+        throw new Error("An active trip already exists for this request.");
       }
 
       const [acceptedOffer] = await tx

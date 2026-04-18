@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import {
@@ -13,6 +13,7 @@ import {
   notifyRequestAccepted,
   resolveOperatorDisplayName,
 } from "@/lib/notifications";
+import { ACTIVE_TRIP_STATUSES, getQueueStatusForPendingOffers } from "@/lib/request-status-sync";
 import { apiError, apiSuccess, getErrorMessage } from "@/app/api/v1/_utils";
 
 const ParamsSchema = z.object({
@@ -101,10 +102,13 @@ export async function POST(
       const [offer] = await db
         .select({
           id: aderoRequestOffers.id,
+          requestId: aderoRequestOffers.requestId,
           operatorId: aderoRequestOffers.operatorId,
           status: aderoRequestOffers.status,
+          requestStatus: aderoRequests.status,
         })
         .from(aderoRequestOffers)
+        .innerJoin(aderoRequests, eq(aderoRequestOffers.requestId, aderoRequests.id))
         .where(eq(aderoRequestOffers.id, offerId))
         .limit(1);
 
@@ -120,19 +124,58 @@ export async function POST(
         return apiError(`Offer is already ${offer.status}.`, 400);
       }
 
-      const [updated] = await db
-        .update(aderoRequestOffers)
-        .set({
-          status: "declined",
-          respondedAt: now,
-        })
-        .where(
-          and(
-            eq(aderoRequestOffers.id, offer.id),
-            eq(aderoRequestOffers.status, "pending"),
-          ),
-        )
-        .returning();
+      const [updated] = await db.transaction(async (tx) => {
+        const [declinedOffer] = await tx
+          .update(aderoRequestOffers)
+          .set({
+            status: "declined",
+            respondedAt: now,
+          })
+          .where(
+            and(
+              eq(aderoRequestOffers.id, offer.id),
+              eq(aderoRequestOffers.status, "pending"),
+            ),
+          )
+          .returning();
+
+        if (declinedOffer === undefined) {
+          return [undefined];
+        }
+
+        const [pendingCounts] = await tx
+          .select({ pendingCount: count() })
+          .from(aderoRequestOffers)
+          .where(
+            and(
+              eq(aderoRequestOffers.requestId, offer.requestId),
+              eq(aderoRequestOffers.status, "pending"),
+            ),
+          );
+
+        const [tripCounts] = await tx
+          .select({ tripCount: count() })
+          .from(aderoTrips)
+          .where(eq(aderoTrips.requestId, offer.requestId));
+
+        const nextRequestStatus = getQueueStatusForPendingOffers(
+          offer.requestStatus,
+          pendingCounts?.pendingCount ?? 0,
+          tripCounts?.tripCount ?? 0,
+        );
+
+        if (nextRequestStatus && nextRequestStatus !== offer.requestStatus) {
+          await tx
+            .update(aderoRequests)
+            .set({
+              status: nextRequestStatus,
+              updatedAt: now,
+            })
+            .where(eq(aderoRequests.id, offer.requestId));
+        }
+
+        return [declinedOffer];
+      });
 
       if (updated === undefined) {
         return apiError("Offer is no longer pending.", 409);
@@ -145,6 +188,7 @@ export async function POST(
     let requestId: string | null = null;
     let requesterId: string | null = null;
     let operatorId: string | null = null;
+    let createdTrip = false;
 
     await db.transaction(async (tx) => {
       const [offer] = await tx
@@ -172,18 +216,52 @@ export async function POST(
         throw new Error("Forbidden");
       }
 
+      if (offer.offerStatus === "accepted") {
+        const [acceptedTrip] = await tx
+          .select({
+            id: aderoTrips.id,
+          })
+          .from(aderoTrips)
+          .where(
+            and(
+              eq(aderoTrips.requestId, offer.requestId),
+              eq(aderoTrips.operatorId, offer.operatorId),
+              inArray(aderoTrips.status, ACTIVE_TRIP_STATUSES),
+            ),
+          )
+          .limit(1);
+
+        if (acceptedTrip !== undefined) {
+          tripId = acceptedTrip.id;
+          requestId = offer.requestId;
+          requesterId = offer.requesterId;
+          operatorId = offer.operatorId;
+          return;
+        }
+
+        throw new Error("Offer is already accepted.");
+      }
+
       if (offer.offerStatus !== "pending") {
         throw new Error(`Offer is already ${offer.offerStatus}.`);
       }
 
-      const [existingTrip] = await tx
-        .select({ id: aderoTrips.id })
+      const [existingActiveTrip] = await tx
+        .select({
+          id: aderoTrips.id,
+          status: aderoTrips.status,
+        })
         .from(aderoTrips)
-        .where(eq(aderoTrips.requestId, offer.requestId))
+        .where(
+          and(
+            eq(aderoTrips.requestId, offer.requestId),
+            inArray(aderoTrips.status, ACTIVE_TRIP_STATUSES),
+          ),
+        )
         .limit(1);
 
-      if (existingTrip !== undefined) {
-        throw new Error("A trip already exists for this request.");
+      if (existingActiveTrip !== undefined) {
+        throw new Error("An active trip already exists for this request.");
       }
 
       const [acceptedOffer] = await tx
@@ -267,10 +345,12 @@ export async function POST(
       requestId = offer.requestId;
       requesterId = offer.requesterId;
       operatorId = offer.operatorId;
+      createdTrip = true;
     });
 
     if (
-      requesterId !== null
+      createdTrip
+      && requesterId !== null
       && requestId !== null
       && operatorId !== null
     ) {

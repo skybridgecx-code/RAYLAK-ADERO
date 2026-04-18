@@ -184,6 +184,8 @@ export async function cancelRequest(
     );
     await Promise.allSettled(notifyOperators);
 
+    revalidatePath("/admin/dispatch");
+    revalidatePath("/app/company");
     revalidatePath("/app/requester");
     revalidatePath("/app/operator");
     revalidatePath("/app/requester/request/new");

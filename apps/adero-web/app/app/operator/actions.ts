@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -21,6 +21,7 @@ import {
   notifyRequestAccepted,
   resolveOperatorDisplayName,
 } from "@/lib/notifications";
+import { ACTIVE_TRIP_STATUSES, getQueueStatusForPendingOffers } from "@/lib/request-status-sync";
 
 export type OperatorWorkflowActionState = {
   error: string | null;
@@ -45,7 +46,10 @@ function actionError(error: unknown): string {
 }
 
 function revalidateOperatorViews(offerId?: string, tripId?: string) {
+  revalidatePath("/admin/dispatch");
+  revalidatePath("/admin/tracking");
   revalidatePath("/app/operator");
+  revalidatePath("/app/company");
   if (offerId) {
     revalidatePath(`/app/operator/offers/${offerId}`);
   }
@@ -142,6 +146,7 @@ export async function acceptOffer(
   let acceptedRequestId: string | null = null;
   let requesterUserId: string | null = null;
   let acceptedOperatorId: string | null = null;
+  let createdTrip = false;
 
   try {
     await db.transaction(async (tx) => {
@@ -170,18 +175,52 @@ export async function acceptOffer(
         throw new Error("Forbidden: this offer is not assigned to you.");
       }
 
+      if (offer.offerStatus === "accepted") {
+        const [acceptedTrip] = await tx
+          .select({
+            id: aderoTrips.id,
+          })
+          .from(aderoTrips)
+          .where(
+            and(
+              eq(aderoTrips.requestId, offer.requestId),
+              eq(aderoTrips.operatorId, offer.operatorId),
+              inArray(aderoTrips.status, ACTIVE_TRIP_STATUSES),
+            ),
+          )
+          .limit(1);
+
+        if (acceptedTrip) {
+          tripId = acceptedTrip.id;
+          acceptedRequestId = offer.requestId;
+          requesterUserId = offer.requesterId;
+          acceptedOperatorId = offer.operatorId;
+          return;
+        }
+
+        throw new Error("Offer is already accepted.");
+      }
+
       if (offer.offerStatus !== "pending") {
         throw new Error(`Offer is already ${offer.offerStatus}.`);
       }
 
-      const [existingTrip] = await tx
-        .select({ id: aderoTrips.id })
+      const [existingActiveTrip] = await tx
+        .select({
+          id: aderoTrips.id,
+          status: aderoTrips.status,
+        })
         .from(aderoTrips)
-        .where(eq(aderoTrips.requestId, offer.requestId))
+        .where(
+          and(
+            eq(aderoTrips.requestId, offer.requestId),
+            inArray(aderoTrips.status, ACTIVE_TRIP_STATUSES),
+          ),
+        )
         .limit(1);
 
-      if (existingTrip) {
-        throw new Error("A trip already exists for this request.");
+      if (existingActiveTrip) {
+        throw new Error("An active trip already exists for this request.");
       }
 
       const [acceptedOffer] = await tx
@@ -256,6 +295,7 @@ export async function acceptOffer(
       acceptedRequestId = offer.requestId;
       requesterUserId = offer.requesterId;
       acceptedOperatorId = offer.operatorId;
+      createdTrip = true;
 
       await tx.insert(aderoTripStatusLog).values({
         tripId: trip.id,
@@ -271,7 +311,7 @@ export async function acceptOffer(
     return { error: actionError(error), success: null, tripId: null };
   }
 
-  if (requesterUserId && acceptedRequestId && acceptedOperatorId) {
+  if (createdTrip && requesterUserId && acceptedRequestId && acceptedOperatorId) {
     try {
       const operatorName = await resolveOperatorDisplayName(acceptedOperatorId);
       await notifyRequestAccepted(requesterUserId, acceptedRequestId, operatorName);
@@ -281,7 +321,11 @@ export async function acceptOffer(
   }
 
   revalidateOperatorViews(offerId, tripId ?? undefined);
-  return { error: null, success: "Offer accepted and trip created.", tripId };
+  return {
+    error: null,
+    success: createdTrip ? "Offer accepted and trip created." : "Offer already accepted.",
+    tripId,
+  };
 }
 
 export async function declineOffer(
@@ -311,10 +355,13 @@ export async function declineOffer(
       const [offer] = await tx
         .select({
           id: aderoRequestOffers.id,
+          requestId: aderoRequestOffers.requestId,
           operatorId: aderoRequestOffers.operatorId,
           status: aderoRequestOffers.status,
+          requestStatus: aderoRequests.status,
         })
         .from(aderoRequestOffers)
+        .innerJoin(aderoRequests, eq(aderoRequestOffers.requestId, aderoRequests.id))
         .where(eq(aderoRequestOffers.id, offerId))
         .limit(1);
 
@@ -349,6 +396,37 @@ export async function declineOffer(
 
       if (!updated) {
         throw new Error("Offer is no longer pending.");
+      }
+
+      const [pendingCounts] = await tx
+        .select({ pendingCount: count() })
+        .from(aderoRequestOffers)
+        .where(
+          and(
+            eq(aderoRequestOffers.requestId, offer.requestId),
+            eq(aderoRequestOffers.status, "pending"),
+          ),
+        );
+
+      const [tripCounts] = await tx
+        .select({ tripCount: count() })
+        .from(aderoTrips)
+        .where(eq(aderoTrips.requestId, offer.requestId));
+
+      const nextRequestStatus = getQueueStatusForPendingOffers(
+        offer.requestStatus,
+        pendingCounts?.pendingCount ?? 0,
+        tripCounts?.tripCount ?? 0,
+      );
+
+      if (nextRequestStatus && nextRequestStatus !== offer.requestStatus) {
+        await tx
+          .update(aderoRequests)
+          .set({
+            status: nextRequestStatus,
+            updatedAt: now,
+          })
+          .where(eq(aderoRequests.id, offer.requestId));
       }
     });
   } catch (error) {

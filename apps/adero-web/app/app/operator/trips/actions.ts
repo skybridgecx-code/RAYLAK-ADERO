@@ -12,6 +12,7 @@ import {
 } from "@/lib/trip-lifecycle";
 import { createNotification, notifyTripStatusChanged } from "@/lib/notifications";
 import { createInvoiceForTrip } from "@/lib/invoicing";
+import { getRequestStatusForTripStatus } from "@/lib/request-status-sync";
 
 export type TripLifecycleActionState = {
   error: string | null;
@@ -42,8 +43,10 @@ function getErrorMessage(error: unknown): string {
 }
 
 function revalidateTripViews(tripId: string) {
+  revalidatePath("/admin/tracking");
   revalidatePath("/app/operator");
   revalidatePath(`/app/operator/trips/${tripId}`);
+  revalidatePath("/app/company");
   revalidatePath("/app/requester");
   revalidatePath(`/app/requester/trips/${tripId}`);
 }
@@ -61,6 +64,8 @@ async function getAuthorizedTrip(
   id: string;
   status: AderoTripStatus;
   operatorId: string;
+  requestId: string;
+  requestStatus: string;
   requesterId: string;
   startedAt: Date | null;
 }> {
@@ -69,6 +74,8 @@ async function getAuthorizedTrip(
       id: aderoTrips.id,
       status: aderoTrips.status,
       operatorId: aderoTrips.operatorId,
+      requestId: aderoTrips.requestId,
+      requestStatus: aderoRequests.status,
       requesterId: aderoRequests.requesterId,
       startedAt: aderoTrips.startedAt,
     })
@@ -93,6 +100,8 @@ async function getAuthorizedTrip(
     id: trip.id,
     status: trip.status,
     operatorId: trip.operatorId,
+    requestId: trip.requestId,
+    requestStatus: trip.requestStatus,
     requesterId: trip.requesterId,
     startedAt: trip.startedAt,
   };
@@ -148,6 +157,17 @@ export async function advanceTripStatus(
     await db.transaction(async (tx) => {
       await tx.update(aderoTrips).set(updateValues).where(eq(aderoTrips.id, trip.id));
 
+      const nextRequestStatus = getRequestStatusForTripStatus(toStatus);
+      if (nextRequestStatus !== trip.requestStatus) {
+        await tx
+          .update(aderoRequests)
+          .set({
+            status: nextRequestStatus,
+            updatedAt: now,
+          })
+          .where(eq(aderoRequests.id, trip.requestId));
+      }
+
       await tx.insert(aderoTripStatusLog).values({
         tripId: trip.id,
         fromStatus: trip.status,
@@ -195,6 +215,9 @@ export async function advanceTripStatus(
       } catch (invoiceError) {
         console.error("[adero] createInvoiceForTrip failed:", invoiceError);
       }
+
+      revalidatePath("/admin/pricing/invoices");
+      revalidatePath("/app/requester/invoices");
     }
 
     revalidateTripViews(trip.id);
@@ -250,6 +273,16 @@ export async function cancelTrip(
           updatedAt: now,
         })
         .where(eq(aderoTrips.id, trip.id));
+
+      if (trip.requestStatus !== "canceled") {
+        await tx
+          .update(aderoRequests)
+          .set({
+            status: "canceled",
+            updatedAt: now,
+          })
+          .where(eq(aderoRequests.id, trip.requestId));
+      }
 
       await tx.insert(aderoTripStatusLog).values({
         tripId: trip.id,

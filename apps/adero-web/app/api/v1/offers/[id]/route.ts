@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import {
@@ -13,6 +13,7 @@ import {
   notifyRequestAccepted,
   resolveOperatorDisplayName,
 } from "@/lib/notifications";
+import { getQueueStatusForPendingOffers } from "@/lib/request-status-sync";
 import { apiError, apiSuccess, getErrorMessage } from "@/app/api/v1/_utils";
 
 const ParamsSchema = z.object({
@@ -101,10 +102,13 @@ export async function POST(
       const [offer] = await db
         .select({
           id: aderoRequestOffers.id,
+          requestId: aderoRequestOffers.requestId,
           operatorId: aderoRequestOffers.operatorId,
           status: aderoRequestOffers.status,
+          requestStatus: aderoRequests.status,
         })
         .from(aderoRequestOffers)
+        .innerJoin(aderoRequests, eq(aderoRequestOffers.requestId, aderoRequests.id))
         .where(eq(aderoRequestOffers.id, offerId))
         .limit(1);
 
@@ -120,19 +124,52 @@ export async function POST(
         return apiError(`Offer is already ${offer.status}.`, 400);
       }
 
-      const [updated] = await db
-        .update(aderoRequestOffers)
-        .set({
-          status: "declined",
-          respondedAt: now,
-        })
-        .where(
-          and(
-            eq(aderoRequestOffers.id, offer.id),
-            eq(aderoRequestOffers.status, "pending"),
-          ),
-        )
-        .returning();
+      const [updated] = await db.transaction(async (tx) => {
+        const [declinedOffer] = await tx
+          .update(aderoRequestOffers)
+          .set({
+            status: "declined",
+            respondedAt: now,
+          })
+          .where(
+            and(
+              eq(aderoRequestOffers.id, offer.id),
+              eq(aderoRequestOffers.status, "pending"),
+            ),
+          )
+          .returning();
+
+        if (declinedOffer === undefined) {
+          return [undefined];
+        }
+
+        const [pendingCounts] = await tx
+          .select({ pendingCount: count() })
+          .from(aderoRequestOffers)
+          .where(
+            and(
+              eq(aderoRequestOffers.requestId, offer.requestId),
+              eq(aderoRequestOffers.status, "pending"),
+            ),
+          );
+
+        const nextRequestStatus = getQueueStatusForPendingOffers(
+          offer.requestStatus,
+          pendingCounts?.pendingCount ?? 0,
+        );
+
+        if (nextRequestStatus && nextRequestStatus !== offer.requestStatus) {
+          await tx
+            .update(aderoRequests)
+            .set({
+              status: nextRequestStatus,
+              updatedAt: now,
+            })
+            .where(eq(aderoRequests.id, offer.requestId));
+        }
+
+        return [declinedOffer];
+      });
 
       if (updated === undefined) {
         return apiError("Offer is no longer pending.", 409);

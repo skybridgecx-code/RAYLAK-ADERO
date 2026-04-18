@@ -8,6 +8,7 @@ import {
   isAderoTripStatus,
   validateTripTransition,
 } from "@/lib/trip-lifecycle";
+import { getRequestStatusForTripStatus } from "@/lib/request-status-sync";
 import { apiError, apiSuccess, getErrorMessage } from "@/app/api/v1/_utils";
 
 const ParamsSchema = z.object({
@@ -51,6 +52,8 @@ export async function POST(
         id: aderoTrips.id,
         status: aderoTrips.status,
         operatorId: aderoTrips.operatorId,
+        requestId: aderoTrips.requestId,
+        requestStatus: aderoRequests.status,
         requesterId: aderoRequests.requesterId,
       })
       .from(aderoTrips)
@@ -83,6 +86,17 @@ export async function POST(
           updatedAt: now,
         })
         .where(eq(aderoTrips.id, trip.id));
+
+      const nextRequestStatus = getRequestStatusForTripStatus("canceled");
+      if (nextRequestStatus !== trip.requestStatus) {
+        await tx
+          .update(aderoRequests)
+          .set({
+            status: nextRequestStatus,
+            updatedAt: now,
+          })
+          .where(eq(aderoRequests.id, trip.requestId));
+      }
 
       await tx.insert(aderoTripStatusLog).values({
         tripId: trip.id,

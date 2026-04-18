@@ -37,6 +37,7 @@ function noticeUrl(message: string, type: "success" | "info" | "error"): string 
 function revalidateDispatchSurfaces() {
   revalidatePath("/admin/dispatch");
   revalidatePath("/app/operator");
+  revalidatePath("/app/company");
   revalidatePath("/app/requester");
 }
 

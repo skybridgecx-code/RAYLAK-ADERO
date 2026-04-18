@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -21,6 +21,7 @@ import {
   notifyRequestAccepted,
   resolveOperatorDisplayName,
 } from "@/lib/notifications";
+import { getQueueStatusForPendingOffers } from "@/lib/request-status-sync";
 
 export type OperatorWorkflowActionState = {
   error: string | null;
@@ -45,7 +46,10 @@ function actionError(error: unknown): string {
 }
 
 function revalidateOperatorViews(offerId?: string, tripId?: string) {
+  revalidatePath("/admin/dispatch");
+  revalidatePath("/admin/tracking");
   revalidatePath("/app/operator");
+  revalidatePath("/app/company");
   if (offerId) {
     revalidatePath(`/app/operator/offers/${offerId}`);
   }
@@ -311,10 +315,13 @@ export async function declineOffer(
       const [offer] = await tx
         .select({
           id: aderoRequestOffers.id,
+          requestId: aderoRequestOffers.requestId,
           operatorId: aderoRequestOffers.operatorId,
           status: aderoRequestOffers.status,
+          requestStatus: aderoRequests.status,
         })
         .from(aderoRequestOffers)
+        .innerJoin(aderoRequests, eq(aderoRequestOffers.requestId, aderoRequests.id))
         .where(eq(aderoRequestOffers.id, offerId))
         .limit(1);
 
@@ -349,6 +356,31 @@ export async function declineOffer(
 
       if (!updated) {
         throw new Error("Offer is no longer pending.");
+      }
+
+      const [pendingCounts] = await tx
+        .select({ pendingCount: count() })
+        .from(aderoRequestOffers)
+        .where(
+          and(
+            eq(aderoRequestOffers.requestId, offer.requestId),
+            eq(aderoRequestOffers.status, "pending"),
+          ),
+        );
+
+      const nextRequestStatus = getQueueStatusForPendingOffers(
+        offer.requestStatus,
+        pendingCounts?.pendingCount ?? 0,
+      );
+
+      if (nextRequestStatus && nextRequestStatus !== offer.requestStatus) {
+        await tx
+          .update(aderoRequests)
+          .set({
+            status: nextRequestStatus,
+            updatedAt: now,
+          })
+          .where(eq(aderoRequests.id, offer.requestId));
       }
     });
   } catch (error) {

@@ -3,6 +3,7 @@
 import { hasAderoAdminCookie } from "@/lib/admin-auth";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
@@ -75,6 +76,9 @@ export async function triggerRequestDispatch(formData: FormData): Promise<void> 
       ),
     );
   } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
     console.error("[adero] triggerRequestDispatch failed:", error);
     redirect(noticeUrl("Dispatch failed. Please retry.", "error"));
   }
@@ -193,6 +197,9 @@ export async function createManualOffer(formData: FormData): Promise<void> {
     revalidateDispatchSurfaces();
     redirect(noticeUrl("Manual offer created.", "success"));
   } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
     console.error("[adero] createManualOffer failed:", error);
     const message =
       error instanceof Error && error.message.trim().length > 0

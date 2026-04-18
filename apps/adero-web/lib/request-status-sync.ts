@@ -17,8 +17,13 @@ export function isQueueRequestStatus(value: string): value is QueueRequestStatus
 export function getQueueStatusForPendingOffers(
   currentStatus: string,
   pendingOfferCount: number,
+  tripCount = 0,
 ): QueueRequestStatus | null {
   if (!isQueueRequestStatus(currentStatus)) {
+    return null;
+  }
+
+  if (tripCount > 0) {
     return null;
   }
 

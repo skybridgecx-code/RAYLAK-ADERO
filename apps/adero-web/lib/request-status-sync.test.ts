@@ -23,6 +23,11 @@ test("getQueueStatusForPendingOffers ignores non-queue request statuses", () => 
   assert.equal(getQueueStatusForPendingOffers("completed", 0), null);
 });
 
+test("getQueueStatusForPendingOffers does not reopen queue state when a trip exists", () => {
+  assert.equal(getQueueStatusForPendingOffers("matched", 0, 1), null);
+  assert.equal(getQueueStatusForPendingOffers("submitted", 2, 1), null);
+});
+
 test("isActiveTripStatus returns true only for non-terminal trip states", () => {
   for (const status of ACTIVE_TRIP_STATUSES) {
     assert.equal(isActiveTripStatus(status), true);

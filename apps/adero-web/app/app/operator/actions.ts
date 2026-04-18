@@ -408,9 +408,15 @@ export async function declineOffer(
           ),
         );
 
+      const [tripCounts] = await tx
+        .select({ tripCount: count() })
+        .from(aderoTrips)
+        .where(eq(aderoTrips.requestId, offer.requestId));
+
       const nextRequestStatus = getQueueStatusForPendingOffers(
         offer.requestStatus,
         pendingCounts?.pendingCount ?? 0,
+        tripCounts?.tripCount ?? 0,
       );
 
       if (nextRequestStatus && nextRequestStatus !== offer.requestStatus) {

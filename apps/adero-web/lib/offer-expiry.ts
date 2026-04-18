@@ -1,7 +1,7 @@
 import "server-only";
 
 import { and, count, eq, lt } from "drizzle-orm";
-import { aderoRequestOffers, aderoRequests, db } from "@raylak/db";
+import { aderoRequestOffers, aderoRequests, aderoTrips, db } from "@raylak/db";
 import { createNotification } from "@/lib/notifications";
 import { getQueueStatusForPendingOffers } from "./request-status-sync";
 
@@ -61,9 +61,15 @@ export async function checkAndExpireOffers(): Promise<{
           ),
         );
 
+      const [tripCounts] = await db
+        .select({ tripCount: count() })
+        .from(aderoTrips)
+        .where(eq(aderoTrips.requestId, offer.requestId));
+
       const nextRequestStatus = getQueueStatusForPendingOffers(
         offer.requestStatus,
         pendingCounts?.pendingCount ?? 0,
+        tripCounts?.tripCount ?? 0,
       );
 
       if (nextRequestStatus && nextRequestStatus !== offer.requestStatus) {

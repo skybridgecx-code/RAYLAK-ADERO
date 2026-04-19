@@ -9,7 +9,8 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "check:admin-auth": "node scripts/check-admin-auth.mjs",
-    "check:deployment-env": "node scripts/check-deployment-env.mjs"
+    "check:deployment-env": "node scripts/check-deployment-env.mjs",
+    "bootstrap:dispatch-manual-check": "node scripts/bootstrap-dispatch-manual-check.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1025.0",
